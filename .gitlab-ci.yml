@@ -1,0 +1,142 @@
+  stages:
+    - docker-build
+    - release
+
+  docker-build:
+    image: $DOCKER_IMAGE
+    stage: docker-build
+    before_script:
+      - if [ "$CI_BUILD_REF_NAME" == "master" ]; then
+        export DOCKER_PATH="workshop_stable";
+        elif  [ "$CI_BUILD_REF_NAME" == "develop" ]; then
+        export DOCKER_PATH="workshop_stable";
+        else
+        export DOCKER_PATH="workshop_unstable";
+        fi
+    script:
+      - COMPONENT=$(echo "$CI_PROJECT_NAME" | tr -d -);
+      - COMPONENT=$(echo "$COMPONENT" | tr A-Z a-z);
+      - APP_VERSION="$(cat pom.xml | grep '^.*</version>$' |head -2 | tail -1 | awk -F'[><]' '{print $3}')"
+      - IMAGE_TAG="$(echo $CI_COMMIT_SHORT_SHA)"
+      - DOCKER_IMAGE_WITH_TAG="$COMPONENT-$APP_VERSION-$CI_PIPELINE_ID-$IMAGE_TAG"
+      - DOCKER_IMAGE_NAME_FULL_PATH="$DOCKER_REPO/$DOCKER_PATH:$DOCKER_IMAGE_WITH_TAG"
+      - echo "Building docker image $DOCKER_IMAGE_NAME_FULL_PATH"
+      - echo "$DOCKER_IMAGE_NAME_FULL_PATH" > dockerimage.txt
+      - echo "{\"credsStore\":\"ecr-login\",\"credHelpers\":{\"$DOCKER_REPO\":\"ecr-login\"}}" > /kaniko/.docker/config.json
+      - if [ "$CI_BUILD_REF_NAME" == master ]; then
+      - DOCKER_IMAGE_WITH_TAG="$COMPONENT-$APP_VERSION-$IMAGE_TAG"
+      - echo "Release Version $DOCKER_IMAGE_WITH_TAG"
+      - RELEASE_DOCKER_IMAGE_NAME_FULL_PATH="$VIE_DOCKER_REPO/charter/workshop-stable:$DOCKER_IMAGE_WITH_TAG"
+      - ARTIFACTOR_DOCKER_IMAGE_NAME_FULL_PATH="pauselive.artifactory.se-charter.net/$COMPONENT:$DOCKER_IMAGE_WITH_TAG"
+      - echo "Creating Release Build $ARTIFACTOR_DOCKER_IMAGE_NAME_FULL_PATH"
+      - echo "Creating Release Build $RELEASE_DOCKER_IMAGE_NAME_FULL_PATH"
+      - echo "{\"auths\":{\"pauselive.artifactory.se-charter.net\":{\"auth\":\"$ARTIFACTORY_TOKEN\",\"email\":\"$ARTIFACTORY_EMAIL\"}}}" >> /kaniko/.docker/config.json
+      - >-
+        /kaniko/executor
+        --dockerfile $CI_PROJECT_DIR/Dockerfile
+        --destination $DOCKER_IMAGE_NAME_FULL_PATH
+        --destination $RELEASE_DOCKER_IMAGE_NAME_FULL_PATH
+        --destination $ARTIFACTOR_DOCKER_IMAGE_NAME_FULL_PATH
+        --context "${CI_PROJECT_DIR}"
+      - else
+      - >-
+        /kaniko/executor
+        --dockerfile $CI_PROJECT_DIR/Dockerfile
+        --destination $DOCKER_IMAGE_NAME_FULL_PATH
+        --context "${CI_PROJECT_DIR}"
+      - fi
+
+    allow_failure: false
+    artifacts:
+      paths:
+        - dockerimage.txt
+      expire_in: 1 day
+    rules:
+      - if: '$CI_COMMIT_TAG == null && $KUBELESS == "false"'
+        when: on_success
+      - when: never
+
+  release:
+    stage: "release"
+    image: python:3.7-alpine
+    script: |
+
+      # Test parameters
+      REPO_URL=https://$CI_PIPELINE_USER:$CI_PIPELINE_PASS@gitlab.se-charter.net/workshop/pause-live/scu-project.git
+
+      if [ "$RELEASE_VERSION" == "" ]
+      then
+          echo "Release Version" was not set
+          exit
+      fi
+      if [ "$NEXT_DEVELOP_VERSION" == "" ]
+      then
+          echo "Next Release Source" was not set
+          exit
+      fi
+
+      apk update
+      apk add git
+      apk add openjdk11
+      apk add maven
+      export PATH=${PATH}:${JAVA_HOME}/bin
+
+
+      #Clone Repo and checkout develop branch
+
+      git config --global user.email "workshop@charter.com"
+      git config --global user.name "workshop"
+      git clone $REPO_URL
+      git fetch origin
+      cd scu-project
+      ls -l
+      # set upstream for commits
+      git checkout master
+      git branch
+      git checkout develop
+      git branch
+
+      APP_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+      echo "found $APP_VERSION in pom.xml"
+
+      if [ "$RELEASE_VERSION" != "$APP_VERSION" ]
+      then
+          echo "Perform Release"
+          # Perform release
+          mvn clean install
+          #  -Dmaven.test.skip=true
+          mvn -X -e versions:set -DnewVersion=$RELEASE_VERSION -DgenerateBackupPoms=false
+
+          #
+          # Commit the changes
+          git commit -a -m "Releasing $RELEASE_VERSION"
+          # Tag
+          git tag -a release-$RELEASE_VERSION -m "Tagging release ${RELEASE_VERSION}"
+          ## Push Tags
+          git branch
+          git push "$REPO_URL"
+
+      fi
+
+      # Merge release
+
+      git checkout master
+      git branch
+      git merge develop
+
+      git branch
+      git push "$REPO_URL"
+
+
+      # Create a branch to change version
+      git checkout develop
+      git branch
+
+      # Change version of Release_Source to next version
+      mvn -X -e versions:set -DnewVersion=$NEXT_DEVELOP_VERSION"-SNAPSHOT" -DgenerateBackupPoms=false
+
+      # Commit it
+      git commit -a -m "Incrementing develop to ${NEXT_DEVELOP_VERSION-SNAPSHOT}"
+      git branch
+      git push "$REPO_URL"
+    allow_failure: false
