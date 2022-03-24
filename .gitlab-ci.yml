@@ -16,7 +16,7 @@
     script:
       - COMPONENT=$(echo "$CI_PROJECT_NAME" | tr -d -);
       - COMPONENT=$(echo "$COMPONENT" | tr A-Z a-z);
-      - APP_VERSION="$(cat pom.xml | grep '^.*</version>$' |head -2 | tail -1 | awk -F'[><]' '{print $3}')"
+      - APP_VERSION="$(cat pom.xml | grep '^.*</version>$' |head -1 | tail -1 | awk -F'[><]' '{print $3}')"
       - IMAGE_TAG="$(echo $CI_COMMIT_SHORT_SHA)"
       - DOCKER_IMAGE_WITH_TAG="$COMPONENT-$APP_VERSION-$CI_PIPELINE_ID-$IMAGE_TAG"
       - DOCKER_IMAGE_NAME_FULL_PATH="$DOCKER_REPO/$DOCKER_PATH:$DOCKER_IMAGE_WITH_TAG"
