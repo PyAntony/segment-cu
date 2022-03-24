@@ -79,7 +79,6 @@ FROM registry.access.redhat.com/ubi8/openjdk-11:1.11
 
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en'
 
-
 # We make four distinct layers so if there are application changes the library layers can be re-used
 COPY --chown=185 target/quarkus-app/lib/ /deployments/lib/
 COPY --chown=185 target/quarkus-app/*.jar /deployments/
