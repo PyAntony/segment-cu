@@ -11,7 +11,7 @@ RUN ls /build/src/main/resources
 # exclusion in .dockerignore: src/main/resources/*.properties
 RUN mvn -Dmaven.test.skip=true \
     -Dquarkus.arc.exclude-types=com.charter.pauselive.scu.kafka.SampleProducer \
-    -Dquarkus.config.locations=file:/config \
+    # -Dquarkus.config.locations=file:/config \
     clean package
 
 FROM registry.access.redhat.com/ubi8/openjdk-11:1.11
