@@ -76,7 +76,7 @@
       cd scu-project-deployment
       IMAGE_NAME=$(cat ${CI_PROJECT_DIR}/dockerimage.txt)
       echo "imageRepository: $IMAGE_NAME" > $DOCKER_IMAGE_FILENAME
-      echo "appVersion: $CI_COMMIT_SHORT_SHA" >> $DOCKER_IMAGE_FILENAME
+      echo "appVersion: dev-$CI_COMMIT_SHORT_SHA" >> $DOCKER_IMAGE_FILENAME
       cat $DOCKER_IMAGE_FILENAME
       git status
       git add $DOCKER_IMAGE_FILENAME
