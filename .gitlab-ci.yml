@@ -1,5 +1,6 @@
   stages:
     - docker-build
+    - argocd-deploy
     - release
 
   docker-build:
