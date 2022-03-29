@@ -1,5 +1,7 @@
 package com.charter.pauselive.scu.model;
 
+import io.vavr.Tuple;
+import io.vavr.Tuple2;
 import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
 
@@ -37,6 +39,10 @@ public class Payloads {
         @Auxiliary
         public abstract long ingestionTime();
 
+        public Tuple2<ABCProfileTracker, ABCReadyMeta> zipWithTracker(String source, long segment) {
+            return Tuple.of(ProfileTracker.of(source, profile(), segment), this);
+        }
+
         @Override
         public String toString() {
             return String.format(
@@ -47,10 +53,26 @@ public class Payloads {
     }
 
     @Immutable
+    public static abstract class ABCProfileTracker {
+        public abstract String source();
+        public abstract String profile();
+        public abstract long segmentNumber();
+    }
+
+    @Immutable
     public static abstract class ABCPlayerCopyReady {
         public abstract String src();
         public abstract long oldestSegment();
         // service must handle '-1' case
         public abstract long lastProcessedSegment();
+    }
+
+    @Immutable
+    public static abstract class ABCSegmentReady {
+        public abstract String source();
+        public abstract String bucket();
+        public abstract String version();
+        public abstract String encodedSegment();
+        public abstract String fileName();
     }
 }

@@ -4,14 +4,8 @@ WORKDIR /build
 COPY ./pom.xml /build/
 COPY ./src/ /build/src
 
-RUN pwd
-RUN ls /build/src/main/
-RUN ls /build/src/main/resources
-
-# exclusion in .dockerignore: src/main/resources/*.properties
 RUN mvn -Dmaven.test.skip=true \
-    -Dquarkus.arc.exclude-types=com.charter.pauselive.scu.kafka.SampleProducer \
-    # -Dquarkus.config.locations=file:/config \
+    -Dquarkus.arc.exclude-types=com.charter.pauselive.scu.kafka.sample.SampleProducer \
     clean package
 
 FROM registry.access.redhat.com/ubi8/openjdk-11:1.11
@@ -29,5 +23,8 @@ USER 185
 ENV AB_JOLOKIA_OFF=""
 ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+
+# src/application.properties is excluded from jar file (defined in pom.xml)
+ENV QUARKUS_CONFIG_LOCATIONS=file:/config,file:/home/jboss/config
 
 # docker run -i --rm -p 8080:8080 <image-tag>
