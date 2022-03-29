@@ -21,10 +21,7 @@ COPY --chown=185 --from=package /build/target/quarkus-app/quarkus/ /deployments/
 EXPOSE 8080
 USER 185
 ENV AB_JOLOKIA_OFF=""
-ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV JAVA_OPTS="-Dquarkus.config.locations=file:/config,file:/home/jboss/config -Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
-
-# src/application.properties is excluded from jar file (defined in pom.xml)
-ENV QUARKUS_CONFIG_LOCATIONS=file:/config,file:/home/jboss/config
 
 # docker run -i --rm -p 8080:8080 <image-tag>
