@@ -1,20 +1,19 @@
-package com.charter.pauselive.scu.cache;
+package com.charter.pauselive.scu.service;
 
 import javax.enterprise.context.ApplicationScoped;
 
 import com.charter.pauselive.scu.model.*;
 import com.charter.pauselive.scu.model.Payloads.*;
-import com.charter.pauselive.scu.utils.Helpers;
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
 import io.vavr.collection.*;
-import lombok.Synchronized;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.quarkus.arc.Lock;
 
 @ApplicationScoped
 public class ReadyKeyCache {
@@ -25,11 +24,11 @@ public class ReadyKeyCache {
     @ConfigProperty(name = "readykey.cache.ttl.seconds")
     private int ttlMaxSeconds;
 
-    static Comparator<KeyTimeWindow> keyTimeComparator = Comparator.comparing(KeyTimeWindow::value);
-
-    TreeMap<KeyTimeWindow, List<ABCReadyKey>> timeTracker = TreeMap.empty(keyTimeComparator);
     ConcurrentHashMap<ABCReadyKey, HashSet<ABCReadyMeta>> sourceSegmentMap = new ConcurrentHashMap<>();
+    ConcurrentHashMap<KeyTimeWindow, List<ABCReadyKey>> timeTracker = new ConcurrentHashMap<>();
 
+    // TODO: check there is only 1 Lock interceptor
+    @Lock(value = Lock.Type.READ)
     public void insert(IncomingKafkaRecord<String, SegmentReadyKey> readyKeyMessage) {
         var payload = readyKeyMessage.getPayload();
         var timestamp = readyKeyMessage.getTimestamp().toEpochMilli();
@@ -42,27 +41,37 @@ public class ReadyKeyCache {
                 HashSet.of(newProfile)
         );
 
-        timeTrackerInsertion(keyTime, payload.getKey());
+        timeTracker.compute(keyTime,
+            (key, list) -> list != null ?
+                list.append(payload.getKey()) :
+                List.of(payload.getKey())
+        );
+
     }
 
-    @Synchronized
-    private void timeTrackerInsertion(KeyTimeWindow keyTime, ABCReadyKey readyKey) {
-        var readyKeys = timeTracker.getOrElse(keyTime, List.empty()).append(readyKey);
-        timeTracker = timeTracker.put(keyTime, readyKeys);
+    public List<ABCReadyKey> readyKeysOlderThan(long segmentNumber) {
+        return List.ofAll(sourceSegmentMap.keySet())
+            .filter(key -> key.segmentNumber() > segmentNumber);
     }
 
-    @Synchronized
-    private void pruneExpiredKeys() {
-        var expired = timeTracker.takeWhile(tp -> tp._1.secondsFromNow() > ttlMaxSeconds);
-        Log.debugf("timeTracker keys: %s", timeTracker.keySet());
-        Log.debugf("Removing expired keys: %s", expired.keySet());
+    public HashSet<ABCReadyMeta> getReadyLocations(ABCReadyKey key) {
+        var payloads = sourceSegmentMap.get(key);
+        return payloads == null ? HashSet.empty() : payloads;
+    }
 
-        expired.flatMap(tp -> {
-            Log.debugf("Pruning cache - timeKey: %s, readyKeys to remove: %s", tp._1, tp._2.size());
-            return tp._2;
-        }).forEach(readyKey -> sourceSegmentMap.remove(readyKey));
+    @Lock
+    @Scheduled(every = "{readykey.cache.prune.every.sec}")
+    void pruneExpiredKeys() {
+        var prunedTracker = new ConcurrentHashMap<KeyTimeWindow, List<ABCReadyKey>>();
+        timeTracker.forEach((timeKey, readyKeys) -> {
+            if (timeKey.secondsFromNow() > ttlMaxSeconds) {
+                Log.debugf("pruneExpiredKeys - Removing entries for timeKey: %s", timeKey);
+                readyKeys.forEach(key -> sourceSegmentMap.remove(key));
+            } else
+                prunedTracker.put(timeKey, readyKeys);
+        });
 
-        timeTracker = timeTracker.drop(expired.size());
+        this.timeTracker = prunedTracker;
     }
 
     private String produceTimeKey(long timestampMilli) {
@@ -72,10 +81,5 @@ public class ReadyKeyCache {
             l -> Instant.ofEpochSecond(l).toString(),
             timestampMilli / 1000
         );
-    }
-
-    @Scheduled(every = "{readykey.cache.prune.every.sec}")
-    void runPrunerTask() {
-        pruneExpiredKeys();
     }
 }
