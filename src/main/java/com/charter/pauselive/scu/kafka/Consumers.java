@@ -5,12 +5,15 @@ import com.charter.pauselive.scu.service.ReadyKeyCache;
 import com.charter.pauselive.scu.model.*;
 import io.quarkus.logging.Log;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
+import io.vavr.collection.List;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.reactive.messaging.Acknowledgment;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -22,6 +25,17 @@ public class Consumers {
     RetryController retryController;
     @Inject
     ReadyKeyCache readyKeyCache;
+
+    @PostConstruct
+    void LogConfig() {
+        var fileProperties = List.ofAll(ConfigProvider.getConfig().getPropertyNames())
+            .map(name -> ConfigProvider.getConfig().getConfigValue(name))
+            .sortBy(configValue -> configValue.getSourceName() + configValue.getName())
+            .filter(cfg -> !cfg.getName().equals("line.separator"))
+            .map(cfg -> String.format("\n\t%s | %s =>\n\t\t%s", cfg.getSourceName(), cfg.getName(), cfg.getValue()));
+
+        Log.debugf("\nConfig from `.properties` INFO: %s", fileProperties);
+    }
 
     @Incoming("copy-ready-topic")
     @Acknowledgment(Acknowledgment.Strategy.NONE)

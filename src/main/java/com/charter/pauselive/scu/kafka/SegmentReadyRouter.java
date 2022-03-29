@@ -82,7 +82,7 @@ public class SegmentReadyRouter {
                 .headOption()
                 .getOrElse(new byte[0]);
         } catch (Exception e) {
-            Log.error("Exception while polling: %s", e);
+            Log.errorf("Exception while polling: %s", e);
             e.printStackTrace();
             return new byte[0];
         }

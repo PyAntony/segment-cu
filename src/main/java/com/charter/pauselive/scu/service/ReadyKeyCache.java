@@ -27,7 +27,6 @@ public class ReadyKeyCache {
     ConcurrentHashMap<ABCReadyKey, HashSet<ABCReadyMeta>> sourceSegmentMap = new ConcurrentHashMap<>();
     ConcurrentHashMap<KeyTimeWindow, List<ABCReadyKey>> timeTracker = new ConcurrentHashMap<>();
 
-    // TODO: check there is only 1 Lock interceptor
     @Lock(value = Lock.Type.READ)
     public void insert(IncomingKafkaRecord<String, SegmentReadyKey> readyKeyMessage) {
         var payload = readyKeyMessage.getPayload();
@@ -46,7 +45,6 @@ public class ReadyKeyCache {
                 list.append(payload.getKey()) :
                 List.of(payload.getKey())
         );
-
     }
 
     public List<ABCReadyKey> readyKeysOlderThan(long segmentNumber) {
