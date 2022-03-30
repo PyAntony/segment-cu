@@ -1,42 +1,71 @@
 package com.charter.pauselive.scu.kafka.sample;
 
 import com.charter.pauselive.scu.model.*;
+import io.quarkus.arc.Lock;
 import io.quarkus.logging.Log;
 import io.vavr.collection.List;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import reactor.core.publisher.Flux;
 
+import java.util.concurrent.LinkedBlockingQueue;
+
 import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 @ApplicationScoped
 public class SampleProducer {
-    static List<String> sources = List.range(1, 13).map(i -> "Src-" + i);
-    static List<String> profiles = List.of("vid1", "vid2", "vid3", "vid4", "audio1");
+    AtomicLong segmentReadyOffsetTracker = new AtomicLong(0);
+    LinkedBlockingQueue<PlayerCopyReady> copyReadyPayloads = new LinkedBlockingQueue<>(Integer.MAX_VALUE);
 
-//    @Outgoing("segment-ready-topic")
-//    public Flux<SegmentReady> producer1() {
-//        return Flux.interval(Duration.ofMillis(500))
-//            .map(__ -> SegmentReady.of(
-//                sources.shuffle().get(0),
-//                "bucket1",
-//                "version1",
-//                "segment",
-//                "file"
-//            ))
-//            .doOnNext(payload -> Log.tracef("Producing segmentReady payload %s", payload));
-//    }
+    @Inject
+    @Channel("ready-key-sample-out")
+    Emitter<SegmentReadyKey> readyKeyEmitter;
 
-    @Outgoing("ready-key-out")
-    public Flux<SegmentReadyKey> producer2() {
-        return Flux.interval(Duration.ofMillis(500))
-            .map(__ -> SegmentReadyKey.of(
-                sources.shuffle().get(0),
-                profiles.shuffle().get(0),
-                System.currentTimeMillis() / 1000,
-                List.range(1, 11).shuffle().get(0),
-                System.currentTimeMillis() / 1000000
-            ))
-            .doOnNext(payload -> Log.tracef("Producing segment agg payload %s", payload));
+    @Outgoing("segment-ready-sample-out")
+    public Flux<SegmentReady> producer1() {
+        return Flux.interval(Duration.ofMillis(1000))
+            .map(__ -> produceMessages())
+            .concatMap(Flux::fromIterable)
+            .doOnNext(payload -> Log.tracef("Producing SegmentReadyKey payload %s", payload));
+    }
+
+    @Outgoing("copy-from-sample-out")
+    public Flux<PlayerCopyReady> producer2() {
+        return Flux.interval(Duration.ofMillis(1000))
+            .filter(__ -> !copyReadyPayloads.isEmpty())
+            .map(__ -> copyReadyPayloads.poll())
+            .doOnNext(payload -> Log.tracef("Producing PlayerCopyReady payload %s", payload));
+    }
+
+    @Lock
+    List<SegmentReady> produceMessages() {
+        var offset1 = segmentReadyOffsetTracker.getAndIncrement();
+        var offset2 = segmentReadyOffsetTracker.getAndIncrement();
+        var offset3 = segmentReadyOffsetTracker.getAndIncrement();
+        var offset4 = segmentReadyOffsetTracker.getAndIncrement();
+        String src = "SRC-" + offset1;
+
+        var segmentReadyPayloads = List.of(
+            SegmentReady.of(src, "???", "???", "segment-" + offset1, "video1"),
+            SegmentReady.of(src, "???", "???", "segment-" + offset1, "audio1"),
+            SegmentReady.of(src, "???", "???", "segment-" + offset3, "video1"),
+            SegmentReady.of(src, "???", "???", "segment-" + offset3, "audio1")
+        );
+
+        var keyReadyPayloads = List.of(
+            SegmentReadyKey.of(src, "video1", offset1, 0, offset1),
+            SegmentReadyKey.of(src, "audio1", offset1, 0, offset2),
+            SegmentReadyKey.of(src, "video1", offset3, 0, offset3),
+            SegmentReadyKey.of(src, "audio1", offset3, 0, offset4)
+        );
+
+        keyReadyPayloads.forEach(key -> readyKeyEmitter.send(key));
+        copyReadyPayloads.offer(PlayerCopyReady.of(src, offset1, offset4));
+
+        return segmentReadyPayloads;
     }
 }

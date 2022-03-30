@@ -16,7 +16,7 @@ import java.util.Collection;
 @Identifier("ready-key-rebalancer")
 public class RebListenerReadyKey implements KafkaConsumerRebalanceListener {
     @ConfigProperty(name = "readykey.cache.ttl.seconds")
-    private int ttlSeconds;
+    int ttlSeconds;
 
     @Override
     public void onPartitionsAssigned(Consumer<?, ?> consumer, Collection<TopicPartition> partitions) {

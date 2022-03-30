@@ -1,10 +1,9 @@
 package com.charter.pauselive.scu.kafka;
 
 import com.charter.pauselive.scu.model.ReadyMeta;
+import io.quarkus.arc.Lock;
 import io.quarkus.logging.Log;
-import io.smallrye.reactive.messaging.kafka.KafkaClientService;
 import io.vavr.collection.List;
-import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
@@ -19,7 +18,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.event.Event;
 import javax.inject.Inject;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Properties;
 import java.util.UUID;
@@ -37,38 +38,26 @@ public class SegmentReadyRouter {
     int consumersNum;
 
     private LinkedBlockingQueue<KafkaConsumer<String, byte[]>> seekers;
-    String subscribedChannel = "copy-ready-topic";
-
-    @Inject
-    KafkaClientService clientService;
-
-    @Inject
-    void setQueue() {
-        seekers = new LinkedBlockingQueue<>(consumersNum);
-
-        var topicPartitions = getAllPartitions(
-            clientService.getConsumer(subscribedChannel).unwrap(),
-            segmentReadyTopic
-        );
-
-        Log.debugf("TopicPartitions found for seekers: %s", topicPartitions);
-        List.range(0, consumersNum).forEach(__ -> {
-            var consumer = getNewSeeker();
-            consumer.assign(topicPartitions.toJavaList());
-            seekers.offer(consumer);
-        });
-    }
+    private List<TopicPartition> assignedTopicPartitions = List.empty();
 
     @Inject
     @Channel("segment-ready-router")
     Emitter<ReadyMeta> kafkaSeekEmitter;
+    @Inject
+    Event<ByteBuffer> segmentReadySent;
+
+    @Inject
+    void setQueue() {
+        seekers = new LinkedBlockingQueue<>(consumersNum);
+        List.range(0, consumersNum).forEach(__ -> seekers.offer(getNewSeeker()));
+    }
 
     public void seekAndFetch(ReadyMeta loc) {
         kafkaSeekEmitter.send(loc);
     }
 
     private byte[] fetchCopyReadyMessage(String topic, ReadyMeta location) {
-        Log.debugf("- fetchCopyReadyMessage request. Topic: %s, location: %s", topic, location);
+        Log.debugf("fetchCopyReadyMessage request. Topic: %s, location: %s", topic, location);
         KafkaConsumer<String, byte[]> seeker;
         do {
             seeker = seekers.poll();
@@ -85,6 +74,8 @@ public class SegmentReadyRouter {
             Log.errorf("Exception while polling: %s", e);
             e.printStackTrace();
             return new byte[0];
+        } finally {
+            seekers.offer(seeker);
         }
     }
 
@@ -100,21 +91,43 @@ public class SegmentReadyRouter {
         return new KafkaConsumer<>(props);
     }
 
-    private List<TopicPartition> getAllPartitions(Consumer<Object, Object> consumer, String topic) {
-        Log.debugf("getAllPartitions - consumer: %s, topic: %s", consumer, topic);
+    private List<TopicPartition> getAllPartitions(KafkaConsumer<String, byte[]> consumer, String topic) {
+        Log.infof("subscribedSeeker - consumer assignments: %s, topic: %s", consumer.assignment(), topic);
+        Log.infof("subscribedSeeker - topics found: %s", consumer.listTopics().keySet());
         return List.ofAll(consumer.listTopics().values())
             .flatMap(partitionInfoList -> partitionInfoList)
             .filter(info -> info.topic().equals(topic))
             .map(info -> new TopicPartition(info.topic(), info.partition()));
     }
 
+    @Lock
+    void assignSeekers(boolean onReassignment) {
+        if (assignedTopicPartitions.isEmpty() || onReassignment) {
+            KafkaConsumer<String, byte[]> anyConsumer = seekers.poll();
+            anyConsumer.subscribe(List.of(segmentReadyTopic).toJavaList());
+
+            assignedTopicPartitions = getAllPartitions(anyConsumer, segmentReadyTopic);
+            Log.infof("TopicPartitions found for seekers: %s", assignedTopicPartitions);
+
+            anyConsumer.unsubscribe();
+            seekers.forEach(consumer -> consumer.assign(assignedTopicPartitions.toJavaList()));
+        }
+
+        if (assignedTopicPartitions.isEmpty())
+            Log.error("No partitions found for segment-ready topic!");
+    }
+
     @Incoming("segment-ready-router")
-    @Outgoing("segment-ready-topic")
+    @Outgoing("segment-ready-topic-alt")
     public Flux<byte[]> trackerProcessor(Publisher<ReadyMeta> kafkaLocations) {
         return Flux.from(kafkaLocations)
+            .doOnNext(msg -> Log.tracef("Router received request: %s", msg))
+            .doOnNext(__ -> assignSeekers(false))
             .flatMap(loc -> Mono.fromCallable(() -> fetchCopyReadyMessage(segmentReadyTopic, loc))
                 .subscribeOn(Schedulers.boundedElastic())
             )
-            .filter(bytes -> !(bytes.length == 0));
+            .filter(bytes -> !(bytes.length == 0))
+            .doOnNext(bytes -> segmentReadySent.fire(ByteBuffer.wrap(bytes)))
+            .doOnNext(__ -> Log.trace("Router sending payload..."));
     }
 }

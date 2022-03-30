@@ -18,7 +18,7 @@ import java.util.Collection;
 @Identifier("ready-copy-rebalancer")
 public class RebListenerCopyReady implements KafkaConsumerRebalanceListener {
     @ConfigProperty(name = "readycopy.seek.before.sec")
-    private int seekBeforeSeconds;
+    int seekBeforeSeconds;
 
     @Inject
     RetryController retryController;

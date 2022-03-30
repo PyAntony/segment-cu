@@ -1,9 +1,15 @@
 package com.charter.pauselive.scu.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.vavr.Tuple;
 import io.vavr.Tuple2;
 import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
+import org.immutables.value.Value.Default;
+import org.immutables.value.Value.Parameter;
+import org.immutables.value.Value.Redacted;
+
+import java.util.UUID;
 
 public class Payloads {
     @Immutable
@@ -13,11 +19,11 @@ public class Payloads {
         public abstract long segmentNumber();
         public abstract int partition();
         public abstract long offset();
-
-        public ABCReadyKey getKey() {
+        @JsonIgnore
+        public ABCReadyKey getKeyPair() {
             return ReadyKey.of(source(), segmentNumber());
         }
-
+        @JsonIgnore
         public ABCReadyMeta getMetadata(long ingestion) {
             return ReadyMeta.of(profile(), partition(), offset(), ingestion);
         }
@@ -65,6 +71,14 @@ public class Payloads {
         public abstract long oldestSegment();
         // service must handle '-1' case
         public abstract long lastProcessedSegment();
+
+        @JsonIgnore
+        @Default
+        @Redacted
+        @Parameter(false)
+        public String uuid() {
+            return UUID.randomUUID().toString();
+        }
     }
 
     @Immutable
