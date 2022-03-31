@@ -43,7 +43,7 @@ public class RetryController {
     }
 
     public boolean insert(IncomingKafkaRecord<String, PlayerCopyReady> message) {
-        copyReadyEvent.fire(message.getPayload());
+        // copyReadyEvent.fire(message.getPayload());
 
         return retryQueue.offer(new RetryTracker(message.getPayload(), readyKeyCache));
     }
@@ -61,7 +61,7 @@ public class RetryController {
 
         retryQueue.removeIf(tracker -> {
             if (tracker.readyKeys.isEmpty() || tracker.retries.get() >= maxCopyRetries) {
-                retryDroppedEvent.fire(tracker);
+                // retryDroppedEvent.fire(tracker);
                 return true;
             } else {
                 var locations = tracker.getSeekLocations(readyKeyCache);
