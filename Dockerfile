@@ -23,5 +23,8 @@ USER 185
 ENV AB_JOLOKIA_OFF=""
 ENV JAVA_OPTS="-Dquarkus.config.locations=file:/config,file:/home/jboss/config -Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+ENV JAVA_MAX_MEM_RATIO=90
+ENV JAVA_INITIAL_MEM_RATIO=50
+
 
 # docker run -i --rm -p 8080:8080 <image-tag>

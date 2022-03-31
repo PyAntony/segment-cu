@@ -7,6 +7,7 @@ import io.vavr.collection.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -39,6 +40,7 @@ public class SegmentReadyRouter {
 
     private LinkedBlockingQueue<KafkaConsumer<String, byte[]>> seekers;
     private List<TopicPartition> assignedTopicPartitions = List.empty();
+    private String finalTopic;
 
     @Inject
     @Channel("segment-ready-router")
@@ -47,9 +49,13 @@ public class SegmentReadyRouter {
     Event<ByteBuffer> segmentReadySent;
 
     @Inject
-    void setQueue() {
+    void setFields() {
         seekers = new LinkedBlockingQueue<>(consumersNum);
         List.range(0, consumersNum).forEach(__ -> seekers.offer(getNewSeeker()));
+
+        finalTopic = ConfigProvider.getConfig().getConfigValue(
+            "mp.messaging.outgoing.segment-ready-topic-alt.topic"
+        ).getValue();
     }
 
     public void seekAndFetch(ReadyMeta loc) {
@@ -69,7 +75,10 @@ public class SegmentReadyRouter {
             return List.ofAll(seeker.poll(Duration.ofMillis(pollMaxDuration)))
                 .map(ConsumerRecord::value)
                 .headOption()
-                .getOrElse(new byte[0]);
+                .getOrElse(() -> {
+                    Log.warnf("fetchCopyReadyMessage - Seeker couldn't find message: %s", location);
+                    return new byte[0];
+                });
         } catch (Exception e) {
             Log.errorf("Exception while polling: %s", e);
             e.printStackTrace();
@@ -121,13 +130,13 @@ public class SegmentReadyRouter {
     @Outgoing("segment-ready-topic-alt")
     public Flux<byte[]> trackerProcessor(Publisher<ReadyMeta> kafkaLocations) {
         return Flux.from(kafkaLocations)
-            .doOnNext(msg -> Log.tracef("Router received request: %s", msg))
+            .doOnNext(msg -> Log.tracef("Router - received request: %s", msg))
             .doOnNext(__ -> assignSeekers(false))
             .flatMap(loc -> Mono.fromCallable(() -> fetchCopyReadyMessage(segmentReadyTopic, loc))
                 .subscribeOn(Schedulers.boundedElastic())
             )
             .filter(bytes -> !(bytes.length == 0))
-            //.doOnNext(bytes -> segmentReadySent.fire(ByteBuffer.wrap(bytes)))
-            .doOnNext(__ -> Log.trace("Router sending payload..."));
+            .doOnNext(bytes -> segmentReadySent.fire(ByteBuffer.wrap(bytes)))
+            .doOnNext(__ -> Log.debugf("Router - message sent to final topic: %s", finalTopic));
     }
 }

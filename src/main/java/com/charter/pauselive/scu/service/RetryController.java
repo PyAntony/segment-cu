@@ -43,7 +43,7 @@ public class RetryController {
     }
 
     public boolean insert(IncomingKafkaRecord<String, PlayerCopyReady> message) {
-        // copyReadyEvent.fire(message.getPayload());
+        copyReadyEvent.fire(message.getPayload());
 
         return retryQueue.offer(new RetryTracker(message.getPayload(), readyKeyCache));
     }
@@ -57,11 +57,11 @@ public class RetryController {
         concurrentExecution = SKIP
     )
     void sendKafkaSeekLocations() {
-        Log.debugf("retryTrackerQueue size: %s", retryQueue.size());
+        Log.debugf("scheduled retry - retryTrackerQueue size: %s", retryQueue.size());
 
         retryQueue.removeIf(tracker -> {
             if (tracker.readyKeys.isEmpty() || tracker.retries.get() >= maxCopyRetries) {
-                // retryDroppedEvent.fire(tracker);
+                retryDroppedEvent.fire(tracker);
                 return true;
             } else {
                 var locations = tracker.getSeekLocations(readyKeyCache);
@@ -101,7 +101,10 @@ class RetryTracker {
         );
 
         return List.ofAll(newLocations)
-            .asJava(list -> list.forEach(tuple -> profilesSent.add(tuple._1)))
+            .asJava(list -> list.forEach(tuple -> {
+                Log.debugf("Sending request to SegmentReadyRouter: %s", tuple);
+                profilesSent.add(tuple._1);
+            }))
             .map(tuple -> (ReadyMeta) tuple._2);
     }
 

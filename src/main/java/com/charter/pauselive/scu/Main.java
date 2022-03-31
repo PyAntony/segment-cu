@@ -5,7 +5,7 @@ import io.quarkus.runtime.Quarkus;
 
 @QuarkusMain
 public class Main {
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         System.out.println("Running Quarkus main method...");
         Quarkus.run(args);
     }

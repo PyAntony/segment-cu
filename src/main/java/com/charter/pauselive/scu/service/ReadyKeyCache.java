@@ -63,13 +63,18 @@ public class ReadyKeyCache {
         var prunedTracker = new ConcurrentHashMap<KeyTimeWindow, List<ABCReadyKey>>();
         timeTracker.forEach((timeKey, readyKeys) -> {
             if (timeKey.secondsFromNow() > ttlMaxSeconds) {
-                Log.debugf("pruneExpiredKeys - Removing entries for timeKey: %s", timeKey);
+                int size = timeTracker.get(timeKey).size();
+                Log.debugf("pruneExpiredKeys - Removing %s entries for timeKey: %s", size, timeKey);
                 readyKeys.forEach(key -> sourceSegmentMap.remove(key));
             } else
                 prunedTracker.put(timeKey, readyKeys);
         });
 
         this.timeTracker = prunedTracker;
+
+//        Log.debugf("ReadyKeyCache - timeTracker current size: %s", timeTracker.size());
+//        long size = sourceSegmentMap.reduceValuesToLong(1, Traversable::size, 0, Long::sum);
+//        Log.debugf("ReadyKeyCache - sourceSegmentMap current size: %s", size);
     }
 
     private String produceTimeKey(long timestampMilli) {
