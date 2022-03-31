@@ -34,7 +34,7 @@ public class Consumers {
             .filter(cfg -> !cfg.getName().equals("line.separator"))
             .map(cfg -> String.format("\n\t%s | %s =>\n\t\t%s", cfg.getSourceName(), cfg.getName(), cfg.getValue()));
 
-        Log.debugf("\nConfig from `.properties` INFO: %s", fileProperties);
+        Log.debugf("\nConfigProvider INFO: %s", fileProperties);
     }
 
     @Incoming("copy-ready-topic")
@@ -48,12 +48,17 @@ public class Consumers {
 
             @Override
             public void hookOnNext(IncomingKafkaRecord<String, PlayerCopyReady> message) {
+                if (message.getPayload().src().equals("ERROR")) {
+                    request(1);
+                    return;
+                }
+
                 boolean capacityIsFull;
                 do {
                     capacityIsFull = !retryController.insert(message);
                 } while (capacityIsFull);
 
-                Log.debugf("copyFrom consumer - message enqueued: %s", message.getPayload());
+                Log.tracef("playerCopyFrom consumer - message enqueued: %s", message.getPayload());
                 request(1);
             }
         };
@@ -62,8 +67,9 @@ public class Consumers {
     @Incoming("ready-key-topic")
     @Acknowledgment(Acknowledgment.Strategy.NONE)
     public CompletionStage<Void> keyTopicConsumer(IncomingKafkaRecord<String, SegmentReadyKey> message) {
-        Log.tracef("received SegmentReadyKey: %s", message.getPayload());
-        readyKeyCache.insert(message);
+        Log.tracef("SegmentReadyKey consumer - cached: %s", message.getPayload());
+        if (!message.getPayload().source().equals("ERROR"))
+            readyKeyCache.insert(message);
 
         return CompletableFuture.completedFuture(null);
     }

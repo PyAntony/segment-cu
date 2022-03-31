@@ -2,12 +2,14 @@ package com.charter.pauselive.scu.service;
 
 import com.charter.pauselive.scu.kafka.SegmentReadyRouter;
 import com.charter.pauselive.scu.model.*;
+import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
 import io.vavr.collection.List;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -20,28 +22,34 @@ import static io.vavr.API.For;
 @ApplicationScoped
 public class RetryController {
     @ConfigProperty(name = "retry.controller.queue.max")
-    private int maxAllowedQueueCapacity;
+    int maxQueueCapacity;
     @ConfigProperty(name = "retry.controller.try.num")
-    private int maxCopyRetries;
+    int maxCopyRetries;
 
-    private LinkedBlockingQueue<RetryTracker> retryTrackerQueue;
+    private LinkedBlockingQueue<RetryTracker> retryQueue;
 
     @Inject
     ReadyKeyCache readyKeyCache;
     @Inject
     SegmentReadyRouter segmentReadyRouter;
+    @Inject
+    Event<PlayerCopyReady> copyReadyEvent;
+    @Inject
+    Event<RetryTracker> retryDroppedEvent;
 
     @Inject
     void setQueue() {
-        retryTrackerQueue = new LinkedBlockingQueue<>(maxAllowedQueueCapacity);
+        retryQueue = new LinkedBlockingQueue<>(maxQueueCapacity);
     }
 
     public boolean insert(IncomingKafkaRecord<String, PlayerCopyReady> message) {
-        return retryTrackerQueue.offer(new RetryTracker(message.getPayload(), readyKeyCache));
+        copyReadyEvent.fire(message.getPayload());
+
+        return retryQueue.offer(new RetryTracker(message.getPayload(), readyKeyCache));
     }
 
     public void emptyQueue() {
-        retryTrackerQueue.clear();
+        retryQueue.clear();
     }
 
     @Scheduled(
@@ -49,11 +57,15 @@ public class RetryController {
         concurrentExecution = SKIP
     )
     void sendKafkaSeekLocations() {
-        retryTrackerQueue.removeIf(tracker -> {
+        Log.debugf("retryTrackerQueue size: %s", retryQueue.size());
+
+        retryQueue.removeIf(tracker -> {
             if (tracker.readyKeys.isEmpty() || tracker.retries.get() >= maxCopyRetries) {
+                retryDroppedEvent.fire(tracker);
                 return true;
             } else {
-                tracker.getSeekLocations(readyKeyCache).forEach(loc -> segmentReadyRouter.seekAndFetch(loc));
+                var locations = tracker.getSeekLocations(readyKeyCache);
+                locations.forEach(loc -> segmentReadyRouter.seekAndFetch(loc));
                 tracker.retries.incrementAndGet();
                 return false;
             }
@@ -62,6 +74,7 @@ public class RetryController {
 }
 
 class RetryTracker {
+    public String copyReadyReqId;
     List<ReadyKey> readyKeys;
     HashSet<Payloads.ABCProfileTracker> profilesSent;
     public AtomicInteger retries = new AtomicInteger(0);
@@ -74,6 +87,9 @@ class RetryTracker {
             List.range(copyReady.oldestSegment(), maxSegment + 1)
                 .map(segment -> ReadyKey.of(copyReady.src(), segment)) :
             List.empty();
+
+        profilesSent = new HashSet<>();
+        copyReadyReqId = copyReady.uuid();
     }
 
     public List<ReadyMeta> getSeekLocations(ReadyKeyCache cache) {
