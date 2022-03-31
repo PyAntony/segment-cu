@@ -127,7 +127,7 @@ public class SegmentReadyRouter {
                 .subscribeOn(Schedulers.boundedElastic())
             )
             .filter(bytes -> !(bytes.length == 0))
-            .doOnNext(bytes -> segmentReadySent.fire(ByteBuffer.wrap(bytes)))
+            // .doOnNext(bytes -> segmentReadySent.fire(ByteBuffer.wrap(bytes)))
             .doOnNext(__ -> Log.trace("Router sending payload..."));
     }
 }
