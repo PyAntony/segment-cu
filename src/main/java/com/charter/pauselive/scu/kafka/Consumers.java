@@ -57,8 +57,8 @@ public class Consumers {
                 do {
                     capacityIsFull = !retryController.insert(message);
                 } while (capacityIsFull);
-
                 Log.tracef("playerCopyFrom consumer - message enqueued: %s", message.getPayload());
+
                 request(1);
             }
         };

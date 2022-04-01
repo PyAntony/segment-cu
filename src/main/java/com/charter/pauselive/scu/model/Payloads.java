@@ -1,15 +1,10 @@
 package com.charter.pauselive.scu.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.vavr.Tuple;
-import io.vavr.Tuple2;
 import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
 import org.immutables.value.Value.Default;
 import org.immutables.value.Value.Parameter;
-import org.immutables.value.Value.Redacted;
-
-import java.util.UUID;
 
 public class Payloads {
     @Immutable
@@ -19,20 +14,43 @@ public class Payloads {
         public abstract long segmentNumber();
         public abstract int partition();
         public abstract long offset();
+
         @JsonIgnore
         public ABCReadyKey getKeyPair() {
             return ReadyKey.of(source(), segmentNumber());
         }
+
         @JsonIgnore
         public ABCReadyMeta getMetadata(long ingestion) {
             return ReadyMeta.of(profile(), partition(), offset(), ingestion);
         }
     }
 
+    /**
+     * Used for ReadyKeyCache and RetryTracker payloadsSent cache.
+     */
     @Immutable
     public static abstract class ABCReadyKey {
         public abstract String source();
         public abstract long segmentNumber();
+
+        @Default
+        @Parameter(false)
+        public String profile() {
+            return "UNDEFINED";
+        }
+
+        public ABCReadyKey withDefinedProfile(String profile) {
+            return ReadyKey.builder()
+                .source(source())
+                .segmentNumber(segmentNumber())
+                .profile(profile)
+                .build();
+        }
+
+        public ABCSegmentReadyKey asSegmentReadyKey(ABCReadyMeta meta) {
+            return SegmentReadyKey.of(source(), meta.profile(), segmentNumber(), meta.partition(), meta.offset());
+        }
     }
 
     @Immutable
@@ -45,10 +63,6 @@ public class Payloads {
         @Auxiliary
         public abstract long ingestionTime();
 
-        public Tuple2<ABCProfileTracker, ABCReadyMeta> zipWithTracker(String source, long segment) {
-            return Tuple.of(ProfileTracker.of(source, profile(), segment), this);
-        }
-
         @Override
         public String toString() {
             return String.format(
@@ -59,26 +73,11 @@ public class Payloads {
     }
 
     @Immutable
-    public static abstract class ABCProfileTracker {
-        public abstract String source();
-        public abstract String profile();
-        public abstract long segmentNumber();
-    }
-
-    @Immutable
     public static abstract class ABCPlayerCopyReady {
         public abstract String src();
         public abstract long oldestSegment();
         // service must handle '-1' case
         public abstract long lastProcessedSegment();
-
-        @JsonIgnore
-        @Default
-        @Redacted
-        @Parameter(false)
-        public String uuid() {
-            return UUID.randomUUID().toString();
-        }
     }
 
     @Immutable
