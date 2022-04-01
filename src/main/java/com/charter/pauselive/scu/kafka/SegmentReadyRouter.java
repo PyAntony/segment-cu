@@ -68,8 +68,10 @@ public class SegmentReadyRouter {
         }
 
         seekerDispatcher.regainSeeker(seeker);
-        if (rawMessage.length == 0)
+        if (rawMessage.length == 0) {
+            Log.debugf("Request %s failed. Sending for retry...", request);
             throw new Exception("fetchCopyReadyMessage failed");
+        }
 
         seekEventSuccess.fire(request);
         return rawMessage;
