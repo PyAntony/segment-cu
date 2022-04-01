@@ -6,6 +6,8 @@ import org.immutables.value.Value.Auxiliary;
 import org.immutables.value.Value.Default;
 import org.immutables.value.Value.Parameter;
 
+import java.util.List;
+
 public class Payloads {
     @Immutable
     public static abstract class ABCSegmentReadyKey {
@@ -14,6 +16,13 @@ public class Payloads {
         public abstract long segmentNumber();
         public abstract int partition();
         public abstract long offset();
+
+        @Auxiliary
+        @Parameter(false)
+        @Default
+        public byte[] fallbackMessage() {
+            return new byte[0];
+        }
 
         @JsonIgnore
         public ABCReadyKey getKeyPair() {
@@ -87,5 +96,14 @@ public class Payloads {
         public abstract String version();
         public abstract String encodedSegment();
         public abstract String fileName();
+    }
+
+    @Immutable
+    public static abstract class ABCSegmentDownload {
+        public abstract ABCSegmentReady segmentReady();
+        public abstract List<String> fileNames();
+        public abstract String downloadPath();
+        public abstract String baseUrl();
+        public abstract int retryCount();
     }
 }

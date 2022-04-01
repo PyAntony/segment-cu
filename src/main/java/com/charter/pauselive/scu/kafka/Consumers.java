@@ -67,9 +67,10 @@ public class Consumers {
     @Incoming("ready-key-topic")
     @Acknowledgment(Acknowledgment.Strategy.NONE)
     public CompletionStage<Void> keyTopicConsumer(IncomingKafkaRecord<String, SegmentReadyKey> message) {
-        Log.tracef("SegmentReadyKey consumer - cached: %s", message.getPayload());
-        if (!message.getPayload().source().equals("ERROR"))
+        if (!message.getPayload().source().equals("ERROR")) {
+            Log.debugf("SegmentReadyKey consumer - cached: %s", message.getPayload());
             readyKeyCache.insert(message);
+        }
 
         return CompletableFuture.completedFuture(null);
     }
