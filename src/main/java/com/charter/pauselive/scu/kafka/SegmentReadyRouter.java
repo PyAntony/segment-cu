@@ -51,7 +51,7 @@ public class SegmentReadyRouter {
         kafkaSeekEmitter.send(request);
     }
 
-    @Retry(maxRetries = 3, delay = 400)
+    @Retry(maxRetries = 3, delay = 500)
     @Fallback(fallbackMethod = "fetchSegmentMessageFallback")
     byte[] fetchSegmentReady(String topic, ABCSegmentReadyKey request) throws Exception {
         var seeker = seekerDispatcher.getSeeker();
