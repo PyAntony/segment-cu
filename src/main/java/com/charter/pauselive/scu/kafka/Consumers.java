@@ -76,7 +76,7 @@ public class Consumers {
     @Acknowledgment(Acknowledgment.Strategy.NONE)
     public CompletionStage<Void> keyTopicConsumer(IncomingKafkaRecord<String, SegmentReadyKey> message) {
         if (!message.getPayload().source().equals("ERROR")) {
-            Log.debugf("SegmentReadyKey consumer - cached: %s", message.getPayload());
+            Log.tracef("SegmentReadyKey consumer - cached: %s", message.getPayload());
             readyKeyCache.insert(message);
         }
 
