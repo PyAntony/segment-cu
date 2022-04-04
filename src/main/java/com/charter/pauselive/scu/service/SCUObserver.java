@@ -34,6 +34,6 @@ public class SCUObserver {
 
     void onSegmentReadyFailure(@Observes @SeekSuccess(value = false) ABCSegmentReadyKey segmentReadyKey) {
         Log.warnf("fetchSegmentReady failed after retries: %s", segmentReadyKey);
-
+        Log.debugf("fetchSegmentReady sent fallback message: %s", segmentReadyKey.fallbackMessage());
     }
 }

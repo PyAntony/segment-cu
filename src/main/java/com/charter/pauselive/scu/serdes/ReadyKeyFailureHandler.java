@@ -1,8 +1,6 @@
 package com.charter.pauselive.scu.serdes;
 
-import com.charter.pauselive.scu.model.PlayerCopyReady;
-import com.charter.pauselive.scu.model.ReadyKey;
-import com.charter.pauselive.scu.model.SegmentReadyKey;
+import com.charter.pauselive.scu.model.*;
 import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.Identifier;
 import io.smallrye.mutiny.Uni;
@@ -12,6 +10,8 @@ import org.apache.kafka.common.header.Headers;
 import javax.enterprise.context.ApplicationScoped;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Optional;
 
 @ApplicationScoped
 @Identifier("ready-key-handler")
@@ -29,7 +29,13 @@ public class ReadyKeyFailureHandler implements DeserializationFailureHandler<Seg
             .onFailure().recoverWithItem(() -> {
                 String payload = new String(data, StandardCharsets.UTF_8);
                 Log.warnf("Deserialization failed. Topic: %s, payload: %s", topic, payload);
-                return SegmentReadyKey.of("ERROR", "ERROR", 0, 0, 0);
+
+                return SegmentReadyKey.of(
+                    "ERROR", "ERROR", 0, 0, 0,
+                    SegmentDownload.of(
+                        SegmentReady.of("", "", "", Optional.empty(), ""),
+                        new ArrayList<>(), "", "", 42
+                    ));
             })
             .await().atMost(Duration.ofMillis(100));
     }

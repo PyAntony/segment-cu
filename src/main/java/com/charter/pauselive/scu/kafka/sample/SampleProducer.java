@@ -9,6 +9,8 @@ import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.enterprise.context.ApplicationScoped;
@@ -20,6 +22,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SampleProducer {
     AtomicLong segmentReadyOffsetTracker = new AtomicLong(0);
     LinkedBlockingQueue<PlayerCopyReady> copyReadyPayloads = new LinkedBlockingQueue<>(Integer.MAX_VALUE);
+    SegmentDownload segmentDownload = SegmentDownload.of(
+        SegmentReady.of("", "", "", Optional.empty(), ""),
+        new ArrayList<>(), "", "", 42
+    );
 
     @Inject
     @Channel("ready-key-sample-out")
@@ -50,17 +56,17 @@ public class SampleProducer {
         String src = "SRC-" + offset1;
 
         var segmentReadyPayloads = List.of(
-            SegmentReady.of(src, "???", "???", "segment-" + offset1, "video1"),
-            SegmentReady.of(src, "???", "???", "segment-" + offset1, "audio1"),
-            SegmentReady.of(src, "???", "???", "segment-" + offset3, "video1"),
-            SegmentReady.of(src, "???", "???", "segment-" + offset3, "audio1")
+            SegmentReady.of(src, "???", "???", Optional.of("segment-" + offset1), "video1"),
+            SegmentReady.of(src, "???", "???", Optional.of("segment-" + offset1), "audio1"),
+            SegmentReady.of(src, "???", "???", Optional.of("segment-" + offset3), "video1"),
+            SegmentReady.of(src, "???", "???", Optional.of("segment-" + offset3), "audio1")
         );
 
         var keyReadyPayloads = List.of(
-            SegmentReadyKey.of(src, "video1", offset1, 0, offset1),
-            SegmentReadyKey.of(src, "audio1", offset1, 0, offset2),
-            SegmentReadyKey.of(src, "video1", offset3, 0, offset3),
-            SegmentReadyKey.of(src, "audio1", offset3, 0, offset4)
+            SegmentReadyKey.of(src, "video1", offset1, 0, offset1, segmentDownload),
+            SegmentReadyKey.of(src, "audio1", offset1, 0, offset2, segmentDownload),
+            SegmentReadyKey.of(src, "video1", offset3, 0, offset3, segmentDownload),
+            SegmentReadyKey.of(src, "audio1", offset3, 0, offset4, segmentDownload)
         );
 
         keyReadyPayloads.forEach(key -> readyKeyEmitter.send(key));

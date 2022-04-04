@@ -8,10 +8,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.faulttolerance.Fallback;
 import org.eclipse.microprofile.faulttolerance.Retry;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
-import org.eclipse.microprofile.reactive.messaging.Incoming;
-import org.eclipse.microprofile.reactive.messaging.Outgoing;
+import org.eclipse.microprofile.reactive.messaging.*;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -35,6 +32,9 @@ public class SegmentReadyRouter {
     @Inject
     @Channel("segment-ready-router")
     Emitter<ABCSegmentReadyKey> kafkaSeekEmitter;
+    @Inject
+    @Channel("fallback-topic")
+    Emitter<ABCSegmentDownload> fallbackEmitter;
     @Inject
     @SeekSuccess(value = true)
     Event<ABCSegmentReadyKey> seekEventSuccess;
@@ -79,6 +79,7 @@ public class SegmentReadyRouter {
 
     byte[] fetchSegmentMessageFallback(String topic, ABCSegmentReadyKey request) {
         seekEventFailure.fire(request);
+        fallbackEmitter.send(request.fallbackMessage());
         return new byte[0];
     }
 
@@ -87,9 +88,10 @@ public class SegmentReadyRouter {
     public Flux<byte[]> trackerProcessor(Publisher<ABCSegmentReadyKey> kafkaLocations) {
         return Flux.from(kafkaLocations)
             .doOnNext(msg -> Log.tracef("Router - received request: %s", msg))
-            .flatMap(req -> Mono.fromCallable(() -> fetchSegmentReady(segmentReadyTopic, req))
-                .subscribeOn(Schedulers.boundedElastic())
+            .flatMap(req ->
+                Mono.fromCallable(() -> fetchSegmentReady(segmentReadyTopic, req))
+                    .subscribeOn(Schedulers.boundedElastic())
             )
-            .filter(bytes -> !(bytes.length == 0));
+            .filter(bytes -> bytes.length != 0);
     }
 }

@@ -1,12 +1,15 @@
 package com.charter.pauselive.scu.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.smallrye.common.constraint.Nullable;
 import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
 import org.immutables.value.Value.Default;
 import org.immutables.value.Value.Parameter;
 
+import java.io.Serializable;
 import java.util.List;
+import java.util.Optional;
 
 public class Payloads {
     @Immutable
@@ -16,13 +19,8 @@ public class Payloads {
         public abstract long segmentNumber();
         public abstract int partition();
         public abstract long offset();
-
         @Auxiliary
-        @Parameter(false)
-        @Default
-        public byte[] fallbackMessage() {
-            return new byte[0];
-        }
+        public abstract SegmentDownload fallbackMessage();
 
         @JsonIgnore
         public ABCReadyKey getKeyPair() {
@@ -31,7 +29,7 @@ public class Payloads {
 
         @JsonIgnore
         public ABCReadyMeta getMetadata(long ingestion) {
-            return ReadyMeta.of(profile(), partition(), offset(), ingestion);
+            return ReadyMeta.of(profile(), partition(), offset(), ingestion, fallbackMessage());
         }
     }
 
@@ -58,7 +56,14 @@ public class Payloads {
         }
 
         public ABCSegmentReadyKey asSegmentReadyKey(ABCReadyMeta meta) {
-            return SegmentReadyKey.of(source(), meta.profile(), segmentNumber(), meta.partition(), meta.offset());
+            return SegmentReadyKey.of(
+                source(),
+                meta.profile(),
+                segmentNumber(),
+                meta.partition(),
+                meta.offset(),
+                meta.fallbackMessage()
+            );
         }
     }
 
@@ -71,6 +76,8 @@ public class Payloads {
         public abstract long offset();
         @Auxiliary
         public abstract long ingestionTime();
+        @Auxiliary
+        public abstract SegmentDownload fallbackMessage();
 
         @Override
         public String toString() {
@@ -94,13 +101,13 @@ public class Payloads {
         public abstract String source();
         public abstract String bucket();
         public abstract String version();
-        public abstract String encodedSegment();
+        public abstract Optional<String> encodedSegment();
         public abstract String fileName();
     }
 
     @Immutable
     public static abstract class ABCSegmentDownload {
-        public abstract ABCSegmentReady segmentReady();
+        public abstract SegmentReady segmentReady();
         public abstract List<String> fileNames();
         public abstract String downloadPath();
         public abstract String baseUrl();
