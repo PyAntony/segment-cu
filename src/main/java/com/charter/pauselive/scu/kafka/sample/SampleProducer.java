@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SampleProducer {
     AtomicLong segmentReadyOffsetTracker = new AtomicLong(0);
     LinkedBlockingQueue<PlayerCopyReady> copyReadyPayloads = new LinkedBlockingQueue<>(Integer.MAX_VALUE);
-    SegmentDownload segmentDownload = SegmentDownload.of(
+    Optional<SegmentDownload> segmentDownload = Optional.of(SegmentDownload.of(
         SegmentReady.of("", "", "", Optional.empty(), ""),
         new ArrayList<>(), "", "", 42
-    );
+    ));
 
     @Inject
     @Channel("ready-key-sample-out")

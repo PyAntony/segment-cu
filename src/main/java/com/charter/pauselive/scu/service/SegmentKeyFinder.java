@@ -1,5 +1,6 @@
 package com.charter.pauselive.scu.service;
 
+import com.charter.pauselive.scu.cache.ReadyKeyCache;
 import com.charter.pauselive.scu.kafka.SegmentReadyRouter;
 import com.charter.pauselive.scu.model.*;
 import io.quarkus.logging.Log;
@@ -16,7 +17,7 @@ import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 
 
 @ApplicationScoped
-public class RetryController {
+public class SegmentKeyFinder {
     @ConfigProperty(name = "retry.controller.queue.max")
     int maxQueueCapacity;
     @ConfigProperty(name = "retry.controller.try.num")
@@ -55,7 +56,7 @@ public class RetryController {
                 retryDroppedEvent.fire(tracker);
                 return true;
             } else {
-                var locations = tracker.getSeekLocations(readyKeyCache);
+                var locations = tracker.getNewSeekLocations(readyKeyCache);
                 locations.forEach(loc -> segmentReadyRouter.sendSeekRequest(loc));
                 tracker.retries.incrementAndGet();
                 return false;

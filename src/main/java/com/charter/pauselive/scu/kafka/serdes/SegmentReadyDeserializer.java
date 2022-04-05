@@ -1,4 +1,4 @@
-package com.charter.pauselive.scu.serdes;
+package com.charter.pauselive.scu.kafka.serdes;
 
 import com.charter.pauselive.scu.model.PlayerCopyReady;
 import com.charter.pauselive.scu.model.SegmentDownload;

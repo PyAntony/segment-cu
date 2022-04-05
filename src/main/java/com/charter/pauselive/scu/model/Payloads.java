@@ -1,13 +1,11 @@
 package com.charter.pauselive.scu.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.smallrye.common.constraint.Nullable;
 import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
 import org.immutables.value.Value.Default;
 import org.immutables.value.Value.Parameter;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,7 +18,7 @@ public class Payloads {
         public abstract int partition();
         public abstract long offset();
         @Auxiliary
-        public abstract SegmentDownload fallbackMessage();
+        public abstract Optional<SegmentDownload> fallbackMessage();
 
         @JsonIgnore
         public ABCReadyKey getKeyPair() {
@@ -34,7 +32,9 @@ public class Payloads {
     }
 
     /**
-     * Used for ReadyKeyCache and RetryTracker payloadsSent cache.
+     * Used for ReadyKeyCache and RetryTracker. SegmentReadyKey payload is split in 2:
+     * ReadyKey and ReadyMeta. This is to save cache memory since there are many profiles for the
+     * same {source, segmentNumber} key
      */
     @Immutable
     public static abstract class ABCReadyKey {
@@ -77,7 +77,7 @@ public class Payloads {
         @Auxiliary
         public abstract long ingestionTime();
         @Auxiliary
-        public abstract SegmentDownload fallbackMessage();
+        public abstract Optional<SegmentDownload> fallbackMessage();
 
         @Override
         public String toString() {

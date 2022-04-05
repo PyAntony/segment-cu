@@ -8,7 +8,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Observes;
 import javax.inject.Inject;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
@@ -16,7 +15,7 @@ public class SCUObserver {
     @ConfigProperty(name = "observer.track.history")
     boolean trackHistory;
 
-    ConcurrentHashMap<SCUTracker, Map<ABCSegmentReadyKey, Boolean>> retryTrackerHistory;
+    ConcurrentHashMap<SCUTracker, Integer> retryTrackerHistory;
 
     @Inject
     void setContainers() {
@@ -25,15 +24,18 @@ public class SCUObserver {
 
     void onRetryTrackerDropped(@Observes SCUTracker scuTracker) {
         if (trackHistory)
-            retryTrackerHistory.putIfAbsent(scuTracker, scuTracker.profilesSent);
+            retryTrackerHistory.putIfAbsent(scuTracker, scuTracker.profilesSent.size());
     }
 
     void onSegmentReadySent(@Observes @SeekSuccess(value = true) ABCSegmentReadyKey segmentReadyKey) {
-        Log.debugf("fetchSegmentReady succeeded: %s", segmentReadyKey);
+        Log.tracef("fetchSegmentReady succeeded: %s", segmentReadyKey);
     }
 
     void onSegmentReadyFailure(@Observes @SeekSuccess(value = false) ABCSegmentReadyKey segmentReadyKey) {
-        Log.warnf("fetchSegmentReady failed after retries: %s", segmentReadyKey);
-        Log.debugf("fetchSegmentReady sent fallback message: %s", segmentReadyKey.fallbackMessage());
+        Log.warnf(
+            "fetchSegmentReady failed after retries: %s. Fallback sent: %s",
+            segmentReadyKey,
+            segmentReadyKey.fallbackMessage()
+        );
     }
 }

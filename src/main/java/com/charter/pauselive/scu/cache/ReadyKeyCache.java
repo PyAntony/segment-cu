@@ -1,9 +1,10 @@
-package com.charter.pauselive.scu.service;
+package com.charter.pauselive.scu.cache;
 
 import javax.enterprise.context.ApplicationScoped;
 
 import com.charter.pauselive.scu.model.*;
 import com.charter.pauselive.scu.model.Payloads.*;
+import com.charter.pauselive.scu.service.Helpers;
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
@@ -71,10 +72,6 @@ public class ReadyKeyCache {
         });
 
         this.timeTracker = prunedTracker;
-
-//        Log.debugf("ReadyKeyCache - timeTracker current size: %s", timeTracker.size());
-//        long size = sourceSegmentMap.reduceValuesToLong(1, Traversable::size, 0, Long::sum);
-//        Log.debugf("ReadyKeyCache - sourceSegmentMap current size: %s", size);
     }
 
     private String produceTimeKey(long timestampMilli) {

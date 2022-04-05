@@ -2,6 +2,7 @@ package com.charter.pauselive.scu.kafka;
 
 import com.charter.pauselive.scu.model.Payloads.*;
 import com.charter.pauselive.scu.annot.EventTypes.SeekSuccess;
+
 import io.quarkus.logging.Log;
 import io.vavr.collection.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -19,6 +20,9 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+
+import static com.charter.pauselive.scu.service.Helpers.runIf;
 
 @ApplicationScoped
 public class SegmentReadyRouter {
@@ -69,7 +73,7 @@ public class SegmentReadyRouter {
 
         seekerDispatcher.regainSeeker(seeker);
         if (rawMessage.length == 0) {
-            Log.debugf("Request %s failed. Sending for retry...", request);
+            Log.tracef("Request %s failed. Sending for retry...", request);
             throw new Exception("fetchCopyReadyMessage failed");
         }
 
@@ -78,20 +82,36 @@ public class SegmentReadyRouter {
     }
 
     byte[] fetchSegmentMessageFallback(String topic, ABCSegmentReadyKey request) {
+        var fallback = request.fallbackMessage();
+
         seekEventFailure.fire(request);
-        fallbackEmitter.send(request.fallbackMessage());
+        runIf(fallback.isPresent(), () -> fallbackEmitter.send(fallback.get()));
         return new byte[0];
     }
 
     @Incoming("segment-ready-router")
     @Outgoing("segment-ready-topic-alt")
-    public Flux<byte[]> trackerProcessor(Publisher<ABCSegmentReadyKey> kafkaLocations) {
+    public Flux<Message<byte[]>> trackerProcessor(Publisher<Message<ABCSegmentReadyKey>> kafkaLocations) {
         return Flux.from(kafkaLocations)
-            .doOnNext(msg -> Log.tracef("Router - received request: %s", msg))
-            .flatMap(req ->
-                Mono.fromCallable(() -> fetchSegmentReady(segmentReadyTopic, req))
-                    .subscribeOn(Schedulers.boundedElastic())
-            )
-            .filter(bytes -> bytes.length != 0);
+            .doOnNext(msg -> Log.tracef("Router - received request: %s", msg.getPayload()))
+            .flatMap(reqMsg -> processSegmentReadyKey(reqMsg)
+                .subscribeOn(Schedulers.boundedElastic())
+            );
+    }
+
+    private Mono<Message<byte[]>> processSegmentReadyKey(Message<ABCSegmentReadyKey> message) {
+        var readyKey = message.getPayload();
+        return Mono.fromCallable(() -> fetchSegmentReady(segmentReadyTopic, readyKey))
+            .filter(bytes -> bytes.length != 0)
+            .map(bytes ->
+                Message.of(bytes).withAck(() -> {
+                        Log.debugf("SegmentReadyKey successfully processed: %s", readyKey);
+                        return message.getAck().get();
+                    })
+                    .withNack(e -> {
+                        Log.warnf("SegmentReady fetched %s, but producer signal error: %s", readyKey, e);
+                        return CompletableFuture.completedFuture(null);
+                    })
+            );
     }
 }

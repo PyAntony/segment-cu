@@ -1,4 +1,4 @@
-package com.charter.pauselive.scu.serdes;
+package com.charter.pauselive.scu.kafka.failure;
 
 import com.charter.pauselive.scu.model.PlayerCopyReady;
 import io.quarkus.logging.Log;
@@ -23,11 +23,12 @@ public class CopyReadyFailureHandler implements DeserializationFailureHandler<Pl
         byte[] data,
         Headers headers
     ) {
+        // only called when failure hence `onItem()` won't work
         return deserialization
             .onFailure().recoverWithItem(() -> {
                 String payload = new String(data, StandardCharsets.UTF_8);
                 Log.warnf("Deserialization failed. Topic: %s, payload: %s", topic, payload);
-                return PlayerCopyReady.of("ERROR", 0, 0);
+                return PlayerCopyReady.of("", 0, 0);
             })
             .await().atMost(Duration.ofMillis(100));
     }

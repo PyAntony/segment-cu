@@ -1,4 +1,4 @@
-package com.charter.pauselive.scu.serdes;
+package com.charter.pauselive.scu.kafka.serdes;
 
 import io.quarkus.kafka.client.serialization.ObjectMapperDeserializer;
 import com.charter.pauselive.scu.model.*;

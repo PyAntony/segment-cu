@@ -16,11 +16,10 @@ public class Helpers {
     /***
      * Calculate the initial time of the bucket where {@code currTimestamp} sits with respect to
      * a timestamp {@code anchor}. Function expects timestamps in seconds (10 digits). Example:
-     * <br><br>
+     * <p>
      * anchor = 2022-11-13T00:00:00Z<br>
      * currTimestamp = 2022-11-13T00:00:13Z<br>
-     * windowSec = 5<br>
-     *
+     * windowSec = 5
      * result = 2022-11-13T00:00:10Z
      *
      * @param anchor starting timestamp.
@@ -34,6 +33,9 @@ public class Helpers {
         return fmt.apply(anchor + ((currTimestamp - anchor) / windowSec) * windowSec);
     }
 
+    /**
+     * Consumer seeks (for all `partitions`) to offsets with timestamp equals to `shouldStartAt`.
+     */
     public static void seekOffsetsAtTimestamp(
         Consumer<?, ?> consumer, Collection<TopicPartition> partitions, long shouldStartAt
     ) {
@@ -51,5 +53,13 @@ public class Helpers {
                     entry.getValue() == null ? 0L : entry.getValue().offset()
                 );
             });
+    }
+
+    /**
+     * Execute Runnable on condition.
+     */
+    public static void runIf(boolean cond, Runnable task) {
+        if (cond)
+            task.run();
     }
 }

@@ -1,4 +1,4 @@
-package com.charter.pauselive.scu.serdes;
+package com.charter.pauselive.scu.kafka.failure;
 
 import com.charter.pauselive.scu.model.*;
 import io.quarkus.logging.Log;
@@ -30,12 +30,7 @@ public class ReadyKeyFailureHandler implements DeserializationFailureHandler<Seg
                 String payload = new String(data, StandardCharsets.UTF_8);
                 Log.warnf("Deserialization failed. Topic: %s, payload: %s", topic, payload);
 
-                return SegmentReadyKey.of(
-                    "ERROR", "ERROR", 0, 0, 0,
-                    SegmentDownload.of(
-                        SegmentReady.of("", "", "", Optional.empty(), ""),
-                        new ArrayList<>(), "", "", 42
-                    ));
+                return SegmentReadyKey.of("", "", 0, 0, 0, Optional.empty());
             })
             .await().atMost(Duration.ofMillis(100));
     }
