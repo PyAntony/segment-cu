@@ -1,10 +1,13 @@
 package com.charter.pauselive.scu.service;
 
 import io.quarkus.logging.Log;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.converters.uni.UniReactorConverters;
 import io.vavr.Function1;
 import io.vavr.collection.List;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.TopicPartition;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -61,5 +64,13 @@ public class Helpers {
     public static void runIf(boolean cond, Runnable task) {
         if (cond)
             task.run();
+    }
+
+    public static <T> Mono<T> asMono(Uni<T> uni) {
+        return uni.convert().with(UniReactorConverters.toMono());
+    }
+
+    public static <T> Uni<T> asUni(Mono<T> mono) {
+        return Uni.createFrom().publisher(mono);
     }
 }
