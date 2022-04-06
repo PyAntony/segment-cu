@@ -88,7 +88,6 @@ public class SegmentReadyRouter {
             e.printStackTrace();
         }
 
-        rawMessage = new byte[0];
         seekerDispatcher.regainSeeker(seeker);
         if (rawMessage.length == 0) {
             Log.tracef("Request %s failed. Sending for retry...", request);
