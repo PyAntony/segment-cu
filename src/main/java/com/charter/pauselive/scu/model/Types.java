@@ -1,5 +1,6 @@
 package com.charter.pauselive.scu.model;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.immutables.value.Value.Immutable;
 
@@ -38,7 +39,7 @@ public class Types {
     }
 
     @Immutable(builder = false, copy = false)
-    static abstract class KafkaMetadata {
+    static abstract class ABCKafkaMetadata {
         public abstract RecordMetadata meta();
 
         @Override
@@ -48,6 +49,18 @@ public class Types {
                 meta().topic(), meta().partition(), meta().offset(), meta().timestamp()
             );
         }
+    }
 
+    @Immutable(builder = false, copy = false)
+    static abstract class ABCKafkaRecordMeta {
+        public abstract ConsumerRecord<String, ?> record();
+
+        @Override
+        public String toString() {
+            return String.format(
+                "RecordMetadata{topic=%s, partition=%s, offset=%s, timestamp=%s, key=%s}",
+                record().topic(), record().partition(), record().offset(), record().timestamp(), record().key()
+            );
+        }
     }
 }

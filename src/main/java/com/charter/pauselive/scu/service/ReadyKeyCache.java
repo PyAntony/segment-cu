@@ -1,4 +1,4 @@
-package com.charter.pauselive.scu.cache;
+package com.charter.pauselive.scu.service;
 
 import javax.enterprise.context.ApplicationScoped;
 

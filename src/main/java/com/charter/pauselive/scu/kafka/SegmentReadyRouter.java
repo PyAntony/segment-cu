@@ -1,14 +1,17 @@
 package com.charter.pauselive.scu.kafka;
 
-import com.charter.pauselive.scu.model.KafkaMetadata;
 import com.charter.pauselive.scu.model.Payloads.*;
 import com.charter.pauselive.scu.annot.EventTypes.SeekSuccess;
+import com.charter.pauselive.scu.service.SeekEvent;
 
+import com.charter.pauselive.scu.model.SegmentDownload;
+import com.charter.pauselive.scu.service.KeyFinderCache;
 import io.quarkus.logging.Log;
+import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.kafka.KafkaClientService;
 import io.smallrye.reactive.messaging.kafka.KafkaProducer;
-import io.vavr.collection.List;
+import io.vavr.Tuple;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -23,20 +26,24 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
-import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import static com.charter.pauselive.scu.service.Helpers.*;
+import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 
 @ApplicationScoped
 public class SegmentReadyRouter {
     @ConfigProperty(name = "readyrouter.segmentready.topic")
     String segmentReadyTopic;
-    @ConfigProperty(name = "readyrouter.poll.duration.milli")
-    int pollMaxDuration;
 
+    AtomicInteger pendingRequests = new AtomicInteger(0);
     String readyRouterFinalTopicChannel = "segment-ready-topic-alt";
     String readyRouterFinalTopic;
 
+    @Inject
+    KeyFinderCache keyFinderCache;
     @Inject
     SeekerDispatcher seekerDispatcher;
     @Inject
@@ -44,19 +51,19 @@ public class SegmentReadyRouter {
 
     @Inject
     @Channel("segment-ready-router")
-    // TODO: action on many errors
     @OnOverflow(OnOverflow.Strategy.UNBOUNDED_BUFFER)
     Emitter<ABCSegmentReadyKey> kafkaSeekEmitter;
+
     @Inject
     @Channel("fallback-topic")
     Emitter<ABCSegmentDownload> fallbackEmitter;
 
     @Inject
     @SeekSuccess(value = true)
-    Event<ABCSegmentReadyKey> seekEventSuccess;
+    Event<SeekEvent> seekEventSuccess;
     @Inject
     @SeekSuccess(value = false)
-    Event<ABCSegmentReadyKey> seekEventFailure;
+    Event<SeekEvent> seekEventFailure;
 
     @PostConstruct
     void prepareSeekers() {
@@ -67,40 +74,36 @@ public class SegmentReadyRouter {
         );
     }
 
-    public void sendSeekRequest(ABCSegmentReadyKey request) {
-        kafkaSeekEmitter.send(request);
+    @Scheduled(
+        every = "1s",
+        concurrentExecution = SKIP
+    )
+    void sendSeekRequest() {
+        if (pendingRequests.get() <= seekerDispatcher.getAvailableSeekers()) {
+            var requests = keyFinderCache.drainAllRequests();
+            Log.debugf("seekerDispatcher in idle state. Sending %s requests...", requests.size());
+
+            pendingRequests.getAndAdd(requests.size());
+            requests.forEach(req -> kafkaSeekEmitter.send(req));
+        } else
+            Log.debugf("seekerDispatcher busy. Can't consume request. Pending: %s", pendingRequests.get());
     }
 
     @Retry(maxRetries = 3, delay = 500)
     @Fallback(fallbackMethod = "fetchSegmentMessageFallback")
-    byte[] fetchSegmentReady(String topic, ABCSegmentReadyKey request) throws Exception {
+    ConsumerRecord<String, byte[]> fetchSegmentReady(String topic, ABCSegmentReadyKey request) throws Exception {
         Log.tracef("fetchSegmentReady request: %s", request);
-        byte[] rawMessage = new byte[0];
-        var seeker = seekerDispatcher.getSeeker();
+        var record = seekerDispatcher.search(segmentReadyTopic, request.partition(), request.offset());
 
-        try {
-            rawMessage = List.ofAll(seeker.poll(Duration.ofMillis(pollMaxDuration)))
-                .map(ConsumerRecord::value)
-                .headOption()
-                .getOrElse(new byte[0]);
-        } catch (Exception e) {
-            Log.errorf("Exception while polling: %s", e);
-            e.printStackTrace();
-        }
-
-        seekerDispatcher.regainSeeker(seeker);
-        if (rawMessage.length == 0) {
+        if (record.value().length == 0) {
             Log.tracef("Request %s failed. Sending for retry...", request);
-            throw new Exception("fetchCopyReadyMessage failed");
-        }
-
-        seekEventSuccess.fire(request);
-        return rawMessage;
+            throw new Exception("fetchCopyReadyMessage failed!");
+        } else
+            return record;
     }
 
-    byte[] fetchSegmentMessageFallback(String topic, ABCSegmentReadyKey request) {
-        seekEventFailure.fire(request);
-        return new byte[0];
+    ConsumerRecord<String, byte[]> fetchSegmentMessageFallback(String topic, ABCSegmentReadyKey request) {
+        return seekerDispatcher.getEmptyRecord();
     }
 
     @Incoming("segment-ready-router")
@@ -109,27 +112,34 @@ public class SegmentReadyRouter {
         var readyKey = message.getPayload();
         var fallback = readyKey.fallbackMessage();
         KafkaProducer<String, byte[]> producer = clientService.getProducer(readyRouterFinalTopicChannel);
-        Runnable sendFallback = () -> runIf(fallback.isPresent(), () -> fallbackEmitter.send(fallback.get()));
+        Consumer<String> onFailure = s -> processFailure(s, readyKey, fallback);
 
-        var mono = Mono.just(readyKey)
+        var monoRecord = Mono.just(readyKey)
             .flatMap(key -> Mono.fromCallable(() -> fetchSegmentReady(segmentReadyTopic, key))
-                .doOnNext(bytes -> runIf(bytes.length == 0, sendFallback))
-                .filter(bytes -> bytes.length != 0)
-                .doOnNext(bytes -> producer.send(new ProducerRecord<>(readyRouterFinalTopic, bytes))
-                    .subscribe().with(
-                        meta -> Log.debugf(
-                            "readyKey processed %s. Kafka broker response: %s", readyKey, KafkaMetadata.of(meta)
-                        ),
-                        e -> {
-                            sendFallback.run();
-                            Log.warnf("Producer got exception for %s. Fallback message sent... %s", readyKey, e);
-                        }
-                    ))
+                .doOnNext(__ -> pendingRequests.decrementAndGet())
+                .doOnNext(bytes -> runIf(
+                    bytes.value().length == 0,
+                    () -> onFailure.accept("SegmentReady not found"))
+                )
+                .filter(bytes -> bytes.value().length != 0)
                 .subscribeOn(Schedulers.boundedElastic())
-            )
+            );
+
+        var monoVoid = monoRecord
+            .flatMap(record -> asMono(
+                producer.send(new ProducerRecord<>(readyRouterFinalTopic, record.value()))
+                    .map(meta -> Tuple.of(record, meta))
+            ))
+            .onErrorContinue((e, obj) -> onFailure.accept("Producer exception: " + e))
+            .doOnNext(tuple -> seekEventSuccess.fire(new SeekEvent(readyKey, tuple._1, tuple._2)))
             .then();
 
-        return asUni(mono);
+        return asUni(monoVoid);
     }
 
+    private void processFailure(String event, ABCSegmentReadyKey request, Optional<SegmentDownload> fallback) {
+        seekEventFailure.fire(new SeekEvent(request, null, null));
+        runIf(fallback.isPresent(), () -> fallbackEmitter.send(fallback.get()));
+        Log.warnf("%s - readyKey: %s, fallback sent: %s", event, request, fallback);
+    }
 }

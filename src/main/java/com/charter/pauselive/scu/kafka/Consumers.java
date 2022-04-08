@@ -1,7 +1,7 @@
 package com.charter.pauselive.scu.kafka;
 
-import com.charter.pauselive.scu.service.SegmentKeyFinder;
-import com.charter.pauselive.scu.cache.ReadyKeyCache;
+import com.charter.pauselive.scu.service.KeyFinderCache;
+import com.charter.pauselive.scu.service.ReadyKeyCache;
 import com.charter.pauselive.scu.model.*;
 import io.quarkus.logging.Log;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
@@ -22,7 +22,7 @@ import javax.inject.Inject;
 @ApplicationScoped
 public class Consumers {
     @Inject
-    SegmentKeyFinder retryController;
+    KeyFinderCache keyFinderCache;
     @Inject
     ReadyKeyCache readyKeyCache;
 
@@ -55,7 +55,7 @@ public class Consumers {
 
                 boolean capacityIsFull;
                 do {
-                    capacityIsFull = !retryController.insert(message);
+                    capacityIsFull = !keyFinderCache.insert(message);
                 } while (capacityIsFull);
                 Log.tracef("playerCopyFrom consumer - message enqueued: %s", message.getPayload());
 

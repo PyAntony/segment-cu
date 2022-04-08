@@ -1,6 +1,5 @@
 package com.charter.pauselive.scu.service;
 
-import com.charter.pauselive.scu.cache.ReadyKeyCache;
 import com.charter.pauselive.scu.model.Payloads.*;
 import com.charter.pauselive.scu.model.PlayerCopyReady;
 import com.charter.pauselive.scu.model.ReadyKey;
@@ -16,7 +15,7 @@ import static io.vavr.API.For;
 /**
  * Class with logic to map PlayerCopyReady to SegmentReadyKey payloads.
  */
-public class SCUTracker {
+public class RequestsTracker {
     /**
      * Initial PlayerCopyReady message.
      */
@@ -36,7 +35,7 @@ public class SCUTracker {
      */
     public AtomicInteger retries = new AtomicInteger(0);
 
-    public SCUTracker(PlayerCopyReady copyReady, ReadyKeyCache cache) {
+    public RequestsTracker(PlayerCopyReady copyReady, ReadyKeyCache cache) {
         long lastSegment = copyReady.lastProcessedSegment();
         long maxSegment = lastSegment > 0 ? lastSegment : estimateLastSegment(copyReady.oldestSegment(), cache);
 

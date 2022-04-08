@@ -5,7 +5,9 @@ import org.immutables.value.Value.Immutable;
 import org.immutables.value.Value.Auxiliary;
 import org.immutables.value.Value.Default;
 import org.immutables.value.Value.Parameter;
+import org.immutables.value.Value.Redacted;
 
+import java.io.Serializable;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,9 +34,9 @@ public class Payloads {
     }
 
     /**
-     * Used for ReadyKeyCache and RetryTracker. SegmentReadyKey payload is split in 2:
+     * Used for ReadyKeyCache and SCUTracker. SegmentReadyKey payload is split in 2:
      * ReadyKey and ReadyMeta. This is to save cache memory since there are many profiles for the
-     * same {source, segmentNumber} key
+     * same {source, segmentNumber} key.
      */
     @Immutable
     public static abstract class ABCReadyKey {
@@ -97,16 +99,17 @@ public class Payloads {
     }
 
     @Immutable
-    public static abstract class ABCSegmentReady {
+    public static abstract class ABCSegmentReady implements Serializable {
         public abstract String source();
         public abstract String bucket();
         public abstract String version();
+        @Redacted
         public abstract Optional<String> encodedSegment();
         public abstract String fileName();
     }
 
     @Immutable
-    public static abstract class ABCSegmentDownload {
+    public static abstract class ABCSegmentDownload implements Serializable {
         public abstract SegmentReady segmentReady();
         public abstract List<String> fileNames();
         public abstract String downloadPath();

@@ -1,7 +1,7 @@
 package com.charter.pauselive.scu.kafka.rebalance;
 
 import com.charter.pauselive.scu.service.Helpers;
-import com.charter.pauselive.scu.service.SegmentKeyFinder;
+import com.charter.pauselive.scu.service.KeyFinderCache;
 import io.smallrye.common.annotation.Identifier;
 import io.smallrye.reactive.messaging.kafka.KafkaConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -21,11 +21,11 @@ public class ListenerCopyReady implements KafkaConsumerRebalanceListener {
     int seekBeforeSeconds;
 
     @Inject
-    SegmentKeyFinder segmentKeyFinder;
+    KeyFinderCache segmentKeyFinder;
 
     @Override
     public void onPartitionsAssigned(Consumer<?, ?> consumer, Collection<TopicPartition> partitions) {
-        segmentKeyFinder.emptyQueue();
+        segmentKeyFinder.emptyQueues();
 
         long shouldStartAt = Instant.now().minus(seekBeforeSeconds, ChronoUnit.SECONDS).toEpochMilli();
         Helpers.seekOffsetsAtTimestamp(consumer, partitions, shouldStartAt);
