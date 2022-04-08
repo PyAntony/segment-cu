@@ -23,7 +23,7 @@ public class SeekEvent {
 
     public String getRepr() {
         return String.format(
-            "SeekEvent{\n\treadyKey=%s, \n\tsegmentReadyMeta=%s, \n\tbrokerResp=%s\n}",
+            "SeekEvent{readyKey=%s, segmentReadyMeta=%s, brokerResp=%s}",
             readyKey,
             KafkaRecordMeta.of(record),
             KafkaMetadata.of(brokerResponse)
@@ -34,7 +34,7 @@ public class SeekEvent {
         ABCSegmentReady segmentReady = asSegmentReadyObj(record.value());
 
         return String.format(
-            "SeekEvent{\n\treadyKey=%s, \n\tsegmentReadyMeta=%s, \n\tsegmentReady=%s, \n\tbrokerResp=%s, \n\tVALID=%s}",
+            "SeekEvent{readyKey=%s, segmentReadyMeta=%s, segmentReady=%s, brokerResp=%s, VALID=%s}",
             readyKey,
             KafkaRecordMeta.of(record),
             segmentReady,
