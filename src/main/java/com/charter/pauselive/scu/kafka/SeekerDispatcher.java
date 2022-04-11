@@ -18,7 +18,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @ApplicationScoped
 public class SeekerDispatcher {
-    @ConfigProperty(name = "dispatcher.seekers.limit.perpartition")
+    @ConfigProperty(name = "dispatcher.seekers.limit")
     int seekersLimit;
     @ConfigProperty(name = "dispatcher.segmentready.topic")
     String segmentReadyTopic;
