@@ -12,8 +12,10 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static com.charter.pauselive.scu.service.Helpers.drainQueue;
 import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 
 
@@ -21,8 +23,6 @@ import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 public class KeyFinderCache {
     @ConfigProperty(name = "keyfinder.readykey.queue.threshold")
     int maxReadyKeyQueueSizeAllowed;
-    @ConfigProperty(name = "keyfinder.queues.max.size")
-    int queuesSizeLimit;
     @ConfigProperty(name = "keyfinder.try.num")
     int maxCopyRetries;
 
@@ -36,24 +36,22 @@ public class KeyFinderCache {
 
     @Inject
     void setQueues() {
-        retryQueue = new LinkedBlockingQueue<>(queuesSizeLimit);
-        readyKeyQueue = new LinkedBlockingQueue<>(queuesSizeLimit);
+        retryQueue = new LinkedBlockingQueue<>(maxReadyKeyQueueSizeAllowed * 10);
+        readyKeyQueue = new LinkedBlockingQueue<>(maxReadyKeyQueueSizeAllowed * 10);
     }
 
-    public boolean insert(IncomingKafkaRecord<String, PlayerCopyReady> message) {
-        if (readyKeyQueue.size() < maxReadyKeyQueueSizeAllowed) {
-            retryQueue.offer(new RequestsTracker(message.getPayload(), readyKeyCache));
-            return true;
-        }
+    public void insertAll(List<PlayerCopyReady> copyReadyRequests) {
+        copyReadyRequests.forEach(
+            request -> retryQueue.offer(new RequestsTracker(request, readyKeyCache))
+        );
+    }
 
-        return false;
+    public boolean hasCapacity() {
+        return readyKeyQueue.size() < maxReadyKeyQueueSizeAllowed;
     }
 
     public ArrayList<ABCSegmentReadyKey> drainAllRequests() {
-        ArrayList<ABCSegmentReadyKey> requests = new ArrayList<>();
-        readyKeyQueue.drainTo(requests);
-
-        return requests;
+        return drainQueue(readyKeyQueue);
     }
 
     public void emptyQueues() {

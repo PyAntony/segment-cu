@@ -3,105 +3,77 @@ package com.charter.pauselive.scu.kafka;
 import io.quarkus.arc.Lock;
 import io.quarkus.logging.Log;
 import io.vavr.collection.List;
-import io.vavr.control.Try;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import java.time.Duration;
-import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 
+/**
+ * 2 observations:
+ * - It's better to let each Consumer handle a single partition.
+ * - Best combination of consumer parameters must be tested.
+ */
 @ApplicationScoped
 public class SeekerDispatcher {
-    @ConfigProperty(name = "%prod.kafka.bootstrap.servers")
-    String kafkaBrokers;
-    @ConfigProperty(name = "dispatcher.consumers.num")
-    int consumersNum;
-    @ConfigProperty(name = "dispatcher.poll.duration.milli")
-    int pollMaxDuration;
+    @ConfigProperty(name = "dispatcher.seekers.limit.perpartition")
+    int seekersLimit;
+    @ConfigProperty(name = "dispatcher.segmentready.topic")
+    String segmentReadyTopic;
 
-    static final ConsumerRecord<String, byte[]> emptyRecord =
-        new ConsumerRecord<>("???", 0, 0, "???", new byte[0]);
-
-    private LinkedBlockingQueue<KafkaConsumer<String, byte[]>> seekers;
-    private List<TopicPartition> assignedTopicPartitions = List.empty();
+    //    private final ConcurrentHashMap<Integer, LinkedBlockingQueue<Seeker>> seekers = new ConcurrentHashMap<>();
+    private LinkedBlockingQueue<Seeker> seekers;
+    private List<TopicPartition> segmentReadyPartitions;
 
     @Inject
-    void initializeSeekers() {
-        seekers = new LinkedBlockingQueue<>(consumersNum);
-        List.range(0, consumersNum).forEach(__ -> seekers.offer(getNewSeeker()));
+    void init() {
+        seekers = new LinkedBlockingQueue<>(seekersLimit);
+        List.range(0, seekersLimit).forEach(__ -> seekers.offer(Seeker.getNew()));
+
+        assignSeekers(segmentReadyTopic);
     }
 
-    public ConsumerRecord<String, byte[]> getEmptyRecord() {
-        return emptyRecord;
-    }
+    public ConsumerRecord<String, byte[]> search(int partition, long offset) {
+        if (!segmentReadyPartitions.contains(new TopicPartition(segmentReadyTopic, partition))) {
+            Log.info("New partition found. Assigning seeker again...");
+            assignSeekers(segmentReadyTopic);
+        }
 
-    public int getAvailableSeekers() {
-        return consumersNum;
-    }
-
-    public ConsumerRecord<String, byte[]> search(String topic, int partition, long offset) {
-        KafkaConsumer<String, byte[]> seeker;
+        Seeker seeker;
         do {
             seeker = seekers.poll();
         } while (seeker == null);
 
-        seeker.seek(new TopicPartition(topic, partition), offset);
-        var record = fetchRecord(seeker, pollMaxDuration);
+        var record = seeker.fetchRecord(segmentReadyTopic, partition, offset);
         seekers.offer(seeker);
 
         return record;
     }
 
-    private ConsumerRecord<String, byte[]> fetchRecord(KafkaConsumer<String, byte[]> seeker, long pollDuration) {
-        return Try.of(() -> seeker.poll(Duration.ofMillis(pollDuration)))
-            .map(records -> List.ofAll(records).headOption())
-            .map(option -> option.getOrElse(emptyRecord))
-            .onFailure(e -> Log.errorf("Exception while polling: %s", e))
-            .getOrElse(emptyRecord);
+    @Lock
+    void assignSeekers(String topic) {
+        segmentReadyPartitions = List.empty();
+
+        Seeker seeker = Seeker.getNew();
+        seeker.subscribe(List.of(topic).toJavaList());
+        segmentReadyPartitions = getAllPartitions(seeker, topic);
+        Log.infof("TopicPartitions found for seekers: %s", segmentReadyPartitions);
+
+        seeker.terminateAsync();
+        seekers.forEach(consumer -> consumer.assign(segmentReadyPartitions.toJavaList()));
+
+        if (segmentReadyPartitions.isEmpty())
+            Log.fatal("No partitions found for segment-ready topic!");
     }
 
-    private List<TopicPartition> getAllPartitions(KafkaConsumer<String, byte[]> consumer, String topic) {
+    private List<TopicPartition> getAllPartitions(Seeker consumer, String topic) {
         Log.infof("subscribedSeeker - consumer assignments: %s, topic: %s", consumer.assignment(), topic);
         Log.infof("subscribedSeeker - topics found: %s", consumer.listTopics().keySet());
         return List.ofAll(consumer.listTopics().values())
             .flatMap(partitionInfoList -> partitionInfoList)
             .filter(info -> info.topic().equals(topic))
             .map(info -> new TopicPartition(info.topic(), info.partition()));
-    }
-
-    @Lock
-    void assignSeekers(String topic) {
-        if (assignedTopicPartitions.isEmpty()) {
-            var anyConsumer = seekers.poll();
-            anyConsumer.subscribe(List.of(topic).toJavaList());
-
-            assignedTopicPartitions = getAllPartitions(anyConsumer, topic);
-            Log.infof("TopicPartitions found for seekers: %s", assignedTopicPartitions);
-
-            anyConsumer.unsubscribe();
-            seekers.offer(anyConsumer);
-            seekers.forEach(consumer -> consumer.assign(assignedTopicPartitions.toJavaList()));
-        }
-
-        if (assignedTopicPartitions.isEmpty())
-            Log.error("No partitions found for segment-ready topic!");
-    }
-
-    private KafkaConsumer<String, byte[]> getNewSeeker() {
-        Properties props = new Properties();
-        props.setProperty("bootstrap.servers", kafkaBrokers);
-        props.setProperty("group.id", "seeker-" + UUID.randomUUID());
-        props.setProperty("enable.auto.commit", "false");
-        props.setProperty("max.poll.records", "1");
-        props.setProperty("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        props.setProperty("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
-
-        return new KafkaConsumer<>(props);
     }
 }

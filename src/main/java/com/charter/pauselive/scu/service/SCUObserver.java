@@ -21,10 +21,10 @@ public class SCUObserver {
         retryTrackerHistory = new ConcurrentHashMap<>();
     }
 
-    void onRetryTrackerDropped(@Observes RequestsTracker scuTracker) {
+//    void onRetryTrackerDropped(@Observes RequestsTracker scuTracker) {
 //        if (debugMode)
 //            retryTrackerHistory.putIfAbsent(scuTracker, scuTracker.profilesSent.size());
-    }
+//    }
 
     void onSeekSuccess(@Observes @SeekSuccess(value = true) SeekEvent seekEvent) {
         Log.debugf(
@@ -34,6 +34,10 @@ public class SCUObserver {
     }
 
     void onSeekFailure(@Observes @SeekSuccess(value = false) SeekEvent seekEvent) {
+        String base = seekEvent.getRecord().value().length == 0 ?
+            "SegmentReady not found for %s" :
+            "Segment Ready found, but producer failed to send message for %s";
 
+        Log.warnf(base, seekEvent.getReadyKey());
     }
 }

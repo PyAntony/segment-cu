@@ -4,7 +4,6 @@ import javax.enterprise.context.ApplicationScoped;
 
 import com.charter.pauselive.scu.model.*;
 import com.charter.pauselive.scu.model.Payloads.*;
-import com.charter.pauselive.scu.service.Helpers;
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
@@ -56,6 +55,10 @@ public class ReadyKeyCache {
     public HashSet<ABCReadyMeta> getReadyLocations(ABCReadyKey key) {
         var payloads = sourceSegmentMap.get(key);
         return payloads == null ? HashSet.empty() : payloads;
+    }
+
+    public HashMap<ABCReadyKey, HashSet<ABCReadyMeta>> getSourceSegmentMapView() {
+        return HashMap.ofAll(sourceSegmentMap);
     }
 
     @Lock

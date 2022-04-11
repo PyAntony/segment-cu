@@ -6,20 +6,22 @@ import com.charter.pauselive.scu.model.Payloads.*;
 import com.charter.pauselive.scu.model.SegmentReady;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.Value;
+import lombok.With;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 
 import java.util.Objects;
 
-@AllArgsConstructor
+@Value
+@With
 public class SeekEvent {
     static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private ABCSegmentReadyKey readyKey;
-    private ConsumerRecord<String, byte[]> record;
-    private RecordMetadata brokerResponse;
+    ABCSegmentReadyKey readyKey;
+    ConsumerRecord<String, byte[]> record;
+    RecordMetadata brokerResponse;
 
     public String getRepr() {
         return String.format(
@@ -34,7 +36,12 @@ public class SeekEvent {
         ABCSegmentReady segmentReady = asSegmentReadyObj(record.value());
 
         return String.format(
-            "SeekEvent{readyKey=%s, segmentReadyMeta=%s, segmentReady=%s, brokerResp=%s, VALID=%s}",
+            "SeekEvent{" +
+                "readyKey=%s, " +
+                "segmentReadyMeta=%s, " +
+                "segmentReady=%s, " +
+                "brokerResp=%s, " +
+                "VALID=%s}",
             readyKey,
             KafkaRecordMeta.of(record),
             segmentReady,

@@ -1,93 +1,86 @@
 package com.charter.pauselive.scu.kafka.sample;
 
 import com.charter.pauselive.scu.model.*;
-import io.quarkus.arc.Lock;
 import io.quarkus.logging.Log;
 import io.vavr.collection.List;
-import lombok.AllArgsConstructor;
-import org.eclipse.microprofile.reactive.messaging.Channel;
-import org.eclipse.microprofile.reactive.messaging.Emitter;
-import org.eclipse.microprofile.reactive.messaging.Outgoing;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.eclipse.microprofile.reactive.messaging.*;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static io.vavr.API.For;
+
 @ApplicationScoped
 public class SampleProducer {
-    AtomicLong segmentTracker = new AtomicLong(1000);
-    AtomicLong segmentReadyOffsetTracker = new AtomicLong(0);
-    LinkedBlockingQueue<PlayerCopyReady> copyReadyPayloads = new LinkedBlockingQueue<>(Integer.MAX_VALUE);
-    Optional<SegmentDownload> segmentDownload = Optional.of(SegmentDownload.of(
-        SegmentReady.of("", "", "", Optional.of(UUID.randomUUID().toString()), ""),
+    List<String> sources = List.of("SRC-11", "SRC-22", "SRC-33");
+    List<String> profiles = List.of("vide1", "video2", "audio1");
+    AtomicLong segmentNumberTracker = new AtomicLong(1000);
+    AtomicLong lastCopyFromSegment = new AtomicLong(1000);
+    SegmentDownload segmentDownload = SegmentDownload.of(
+        SegmentReady.of("", "", "", Optional.empty(), ""),
         new ArrayList<>(), "", "", 42
-    ));
-
-    @Inject
-    @Channel("ready-key-sample-out")
-    Emitter<SegmentReadyKey> readyKeyEmitter;
+    );
 
     @Outgoing("segment-ready-sample-out")
-    public Flux<SegmentReady> producer1() {
+    public Flux<SegmentReady> segmentReadyProducer() {
         return Flux.interval(Duration.ofMillis(1000))
-            .map(__ -> produceMessages())
-            .concatMap(Flux::fromIterable)
+            .flatMapIterable(__ -> segmentReadyList(segmentNumberTracker.getAndIncrement()))
+            .doOnNext(payload -> Log.tracef("Producing SegmentReady payload %s", payload));
+    }
+
+    @Incoming("segment-ready-sample-in")
+    @Outgoing("ready-key-sample-out")
+    @Acknowledgment(Acknowledgment.Strategy.NONE)
+    public Flux<SegmentReadyKey> readyKeyProducer(Publisher<ConsumerRecord<String, SegmentReady>> segmentReadyStream) {
+        return Flux.from(segmentReadyStream)
+            .map(record -> {
+                SegmentReady payload = record.value();
+                String[] profileSegment = StringUtils.split(payload.fileName(), "::");
+
+                return SegmentReadyKey.of(
+                    payload.source(),
+                    profileSegment[0],
+                    Long.parseLong(profileSegment[1]),
+                    record.partition(),
+                    record.offset(),
+                    Optional.of(segmentDownload)
+                );
+            })
             .doOnNext(payload -> Log.tracef("Producing SegmentReadyKey payload %s", payload));
     }
 
     @Outgoing("copy-from-sample-out")
-    public Flux<PlayerCopyReady> producer2() {
+    public Flux<PlayerCopyReady> segmentCopyFromProducer() {
         return Flux.interval(Duration.ofMillis(1000))
-            .filter(__ -> !copyReadyPayloads.isEmpty())
-            .map(__ -> copyReadyPayloads.poll())
-            .doOnNext(payload -> Log.tracef("Producing PlayerCopyReady payload %s", payload));
+            .filter(__ -> segmentNumberTracker.get() > 1005)
+            .filter(__ -> segmentNumberTracker.get() - lastCopyFromSegment.get() > 3)
+            .map(__ -> {
+                long latestOffset = lastCopyFromSegment.addAndGet(3);
+                return PlayerCopyReady.of(
+                    sources.shuffle().get(0),
+                    latestOffset - 2,
+                    latestOffset
+                );
+            });
     }
 
-    @Lock
-    List<SegmentReady> produceMessages() {
-        var encoding = Optional.of(UUID.randomUUID().toString());
-        String source = "SRC-" + List.range(1, 99).shuffle().get(0);
+    private List<SegmentReady> segmentReadyList(long segmentNumber) {
+        var encoding = Optional.of(StringUtils.repeat(UUID.randomUUID().toString(), 1));
 
-        var profileMarkers = List.range(0, 4)
-            .map(i -> new ProfileMarker(
-                source,
-                "profile" + i,
-                segmentTracker.getAndIncrement(),
-                segmentReadyOffsetTracker.getAndIncrement()
-            ));
-
-        var segmentReadyPayloads = profileMarkers.map(p ->
-            SegmentReady.of(p.src, "???", "???", encoding, p.fileName())
-        );
-        var keyReadyPayloads = profileMarkers.map(p ->
-            SegmentReadyKey.of(source, p.profile, p.segmentNumber, 0, p.offset, segmentDownload)
-        );
-        var playerCopy = PlayerCopyReady.of(
-            source, profileMarkers.get(0).segmentNumber, profileMarkers.get(3).segmentNumber
-        );
-
-        keyReadyPayloads.forEach(key -> readyKeyEmitter.send(key));
-        copyReadyPayloads.offer(playerCopy);
-
-        return segmentReadyPayloads;
-    }
-
-    @AllArgsConstructor
-    public static class ProfileMarker {
-        String src;
-        String profile;
-        long segmentNumber;
-        long offset;
-
-        public String fileName() {
-            return profile + "-" + segmentNumber + ".extension";
-        }
+        return List.ofAll(For(sources, src ->
+            For(profiles
+                .map(profile -> String.format("%s::%s", profile, segmentNumber))
+                .map(fileName -> SegmentReady.of(src, "???", "???", encoding, fileName))
+            ).yield()
+        ));
     }
 }

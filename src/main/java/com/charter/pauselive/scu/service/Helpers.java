@@ -10,9 +10,11 @@ import org.apache.kafka.common.TopicPartition;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class Helpers {
 
@@ -72,5 +74,12 @@ public class Helpers {
 
     public static <T> Uni<T> asUni(Mono<T> mono) {
         return Uni.createFrom().publisher(mono);
+    }
+
+    public static <T> ArrayList<T> drainQueue(LinkedBlockingQueue<T> queue) {
+        ArrayList<T> requests = new ArrayList<>();
+        queue.drainTo(requests);
+
+        return requests;
     }
 }
