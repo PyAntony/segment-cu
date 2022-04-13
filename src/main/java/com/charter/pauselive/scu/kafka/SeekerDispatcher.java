@@ -12,6 +12,9 @@ import javax.enterprise.context.ApplicationScoped;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
+ * Dispatcher instantiates all seekers and assigns them to required topic (segment-ready).
+ * It holds a queue of seekers that resembles a worker thread pool.
+ *
  * 2 observations:
  * - It's better to let each Consumer handle a single partition.
  * - Best combination of consumer parameters must be tested.

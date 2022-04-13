@@ -14,6 +14,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.charter.pauselive.scu.model.Payloads.*;
 
+/**
+ * Observes events fired by other application classes. It also stores this events
+ * for later analysis.
+ */
 @ApplicationScoped
 public class SCUObserver {
     @ConfigProperty(name = "observer.debug.mode")

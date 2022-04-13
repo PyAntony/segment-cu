@@ -22,6 +22,10 @@ import javax.inject.Inject;
 
 import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 
+/**
+ * Consumer from main topics: segment-ready-keys and segment-copy-from-ready.
+ * Consumers push messages to respective caches.
+ */
 @ApplicationScoped
 public class Consumers {
     @ConfigProperty(name = "consumer.copyready.request.batch")

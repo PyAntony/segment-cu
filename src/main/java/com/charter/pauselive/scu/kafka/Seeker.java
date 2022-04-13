@@ -26,6 +26,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.charter.pauselive.scu.model.*;
 
+/**
+ * Seeker is a regular Kafka consumer with the task to fetch a message from a single partition/offset.
+ */
 @Dependent
 @Unremovable
 public class Seeker extends KafkaConsumer<String, byte[]> {

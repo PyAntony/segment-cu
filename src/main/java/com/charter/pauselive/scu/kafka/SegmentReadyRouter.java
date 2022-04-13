@@ -22,6 +22,10 @@ import java.time.Duration;
 
 import static com.charter.pauselive.scu.service.Helpers.*;
 
+/**
+ * Class process each segment ready key: it requests the segmentReady message for that key,
+ * send that message to the destination topic, and sends a fallback message when failure.
+ */
 @ApplicationScoped
 public class SegmentReadyRouter {
     final String finalDestinationChannel = "segment-ready-topic-alt";

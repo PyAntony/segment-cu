@@ -34,11 +34,16 @@ public class IntegrationTest {
 
     @BeforeAll
     public static void setup() throws InterruptedException {
-        // let app run for some time
+        // Just let the app run. Sample producers send payloads for app to process data.
         Log.debug("Sleeping before all tests...");
         Thread.sleep(30000);
     }
 
+    /**
+     * Test that, for each segment requested (from PlayerCopyReady), all profiles
+     * have been found in readyKeyCache. Profiles sent in sample producers are deterministic,
+     * so we know which profiles we expect for each source and segment.
+     */
     @Test
     void testProfilesFoundInReadyKeyCache() {
         observer.getRequestTrackerHistory().values().forEach(
@@ -58,6 +63,10 @@ public class IntegrationTest {
         );
     }
 
+    /**
+     * Test that each segmentReadyKey has been processed: each segmentReady has been found when seeked and
+     * delivered to the final topic.
+     */
     @Test
     void testAllSegmentReadyKeysSuccessfullyProcessed() {
         var sentHistory = observer.getSuccessfulHistory();
@@ -78,6 +87,10 @@ public class IntegrationTest {
         assertTrue(failedProfiles.isEmpty());
     }
 
+    /**
+     * Validate each segmentReadyKey processed. See `validateSeekEvent` in `SeekEvent` class
+     * for validation conditions.
+     */
     @Test
     void testAllSegmentReadyKeysAreValid() {
         var sentHistory = List.ofAll(observer.getSuccessfulHistory().values());
