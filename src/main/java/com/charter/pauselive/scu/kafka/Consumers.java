@@ -12,17 +12,14 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Acknowledgment;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.LinkedBlockingQueue;
 import javax.inject.Inject;
 
-import static com.charter.pauselive.scu.service.Helpers.drainQueue;
 import static io.quarkus.scheduler.Scheduled.ConcurrentExecution.SKIP;
 
 @ApplicationScoped
@@ -35,8 +32,7 @@ public class Consumers {
     @Inject
     ReadyKeyCache readyKeyCache;
 
-    private LinkedBlockingQueue<PlayerCopyReady> copyReadyTmpQueue;
-    BaseSubscriber<IncomingKafkaRecord<String, PlayerCopyReady>> copyReadySubscriber;
+    BaseSubscriber<PlayerCopyReady> copyReadySubscriber;
 
     @PostConstruct
     void init() {
@@ -48,28 +44,22 @@ public class Consumers {
 
         Log.debugf("\nConfigProvider INFO: %s", fileProperties);
 
-        copyReadyTmpQueue = new LinkedBlockingQueue<>(copyReadyRequestBatch.intValue() * 10);
         copyReadySubscriber = new BaseSubscriber<>() {
             @Override
-            public void hookOnSubscribe(Subscription subscription) {
-                request(1);
-            }
-
-            @Override
-            public void hookOnNext(IncomingKafkaRecord<String, PlayerCopyReady> message) {
-                if (message.getPayload().src().isBlank()) {
+            public void hookOnNext(PlayerCopyReady message) {
+                if (message.src().isBlank()) {
                     request(1);
                     return;
                 }
 
-                copyReadyTmpQueue.offer(message.getPayload());
+                keyFinderCache.insert(message);
             }
         };
     }
 
     @Incoming("copy-ready-topic")
     @Acknowledgment(Acknowledgment.Strategy.NONE)
-    public Subscriber<IncomingKafkaRecord<String, PlayerCopyReady>> copyTopicConsumer() {
+    public Subscriber<PlayerCopyReady> copyTopicConsumer() {
         return copyReadySubscriber;
     }
 
@@ -92,9 +82,7 @@ public class Consumers {
         concurrentExecution = SKIP
     )
     void pushCopyReadyRequests() {
-        if (keyFinderCache.hasCapacity()) {
+        if (keyFinderCache.hasCapacity())
             copyReadySubscriber.request(copyReadyRequestBatch);
-            keyFinderCache.insertAll(drainQueue(copyReadyTmpQueue));
-        }
     }
 }

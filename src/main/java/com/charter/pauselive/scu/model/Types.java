@@ -1,9 +1,13 @@
 package com.charter.pauselive.scu.model;
 
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.immutables.value.Value.Immutable;
+import org.immutables.value.Value.Default;
+import org.immutables.value.Value.Parameter;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -61,6 +65,17 @@ public class Types {
                 "RecordMetadata{topic=%s, partition=%s, offset=%s, timestamp=%s, key=%s}",
                 record().topic(), record().partition(), record().offset(), record().timestamp(), record().key()
             );
+        }
+    }
+
+    @Immutable(builder = false, copy = false)
+    static abstract class ABCSeekerFetchMetrics implements Serializable {
+        public abstract long processTimeMilli();
+        public abstract int onEmptyRetries();
+        public abstract int onErrorRetries();
+
+        public static String key() {
+            return "FETCH_METRICS";
         }
     }
 }

@@ -5,6 +5,7 @@ import io.quarkus.arc.Unremovable;
 import io.quarkus.logging.Log;
 import io.vavr.collection.HashSet;
 import io.vertx.core.Vertx;
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.KafkaException;
@@ -12,16 +13,18 @@ import org.apache.kafka.common.TopicPartition;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Timed;
 import reactor.util.retry.Retry;
 
 import javax.enterprise.context.Dependent;
 import javax.enterprise.inject.spi.CDI;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.charter.pauselive.scu.model.*;
 
 @Dependent
 @Unremovable
@@ -29,7 +32,6 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
     int pollTries;
     int pollMaxDuration;
     final String identifier;
-    public TopicPartition assignedTopicPartition;
 
     static final private Faker faker = new Faker();
     static final public ConsumerRecord<String, byte[]> emptyRecord =
@@ -48,12 +50,21 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
         pollTries = pollTriesNum;
     }
 
-    public ConsumerRecord<String, byte[]> fetchRecord(String topic, int partition, long offset) {
-        var topicPartition = new TopicPartition(topic, partition);
-        activateSinglePartition(topicPartition);
-        seek(topicPartition, offset);
+    public Seeker withAssignment(Collection<TopicPartition> topicPartitions) {
+        assign(topicPartitions);
+        return this;
+    }
 
-        return Mono.fromCallable(() -> poll(Duration.ofMillis(pollMaxDuration)))
+    public ConsumerRecord<String, byte[]> fetchRecord(String topic, int partition, long offset) {
+        AtomicInteger emptyTries = new AtomicInteger(0);
+        AtomicInteger exceptionTries = new AtomicInteger(0);
+
+        return Mono.just(new TopicPartition(topic, partition))
+            .doOnNext(topicPartition -> {
+                activateSinglePartition(topicPartition);
+                seek(topicPartition, offset);
+            })
+            .flatMap(__ -> Mono.fromCallable(() -> poll(Duration.ofMillis(pollMaxDuration))))
             .flatMap(records -> Flux.fromIterable(records)
                 .filter(record -> correctRecord(record, partition, offset))
                 .next()
@@ -61,19 +72,27 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
             )
             .retryWhen(Retry.max(pollTries)
                 .filter(e -> e instanceof RecordNotFoundException)
-                .doAfterRetry(signal -> Log.debugf("%s - empty records. Polling again...", identifier))
+                .doAfterRetry(signal -> {
+                    emptyTries.getAndIncrement();
+                    Log.debugf("%s - empty records. Polling again...", identifier);
+                })
             )
             .retryWhen(Retry.fixedDelay(2, Duration.ofMillis(500))
                 .filter(e -> e instanceof KafkaException)
-                .doAfterRetry(signal -> Log.warnf("%s - Pooling exception! %s", identifier, signal))
+                .doAfterRetry(signal -> {
+                    exceptionTries.getAndIncrement();
+                    Log.warnf("%s - Pooling exception! %s", identifier, signal);
+                })
             )
             .onErrorReturn(emptyRecord)
             .timed()
-            .doOnNext(timed -> {
+            .map(timed -> {
                 var millis = timed.elapsedSinceSubscription().toMillis();
-                Log.debugf("%s - fetchRecord time elapsed milli: %s", identifier, millis);
+                var metrics = SeekerFetchMetrics.of(millis, emptyTries.get(), exceptionTries.get());
+                timed.get().headers().add(SeekerFetchMetrics.key(), metrics.toString().getBytes());
+
+                return timed.get();
             })
-            .map(Timed::get)
             .block();
     }
 
@@ -92,6 +111,9 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
     }
 
     private void activateSinglePartition(TopicPartition topicPartition) {
+        if (!assignment().contains(topicPartition))
+            assign(HashSet.ofAll(assignment()).add(topicPartition).toJavaSet());
+
         pause(assignment());
         resume(HashSet.of(topicPartition).toJavaSet());
     }

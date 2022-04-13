@@ -21,10 +21,9 @@ import static io.vavr.API.For;
 
 @ApplicationScoped
 public class SampleProducer {
-    List<String> sources = List.of("SRC-11", "SRC-22", "SRC-33");
-    List<String> profiles = List.of("vide1", "video2", "audio1");
+    public static List<String> sources = List.of("SRC-11", "SRC-22", "SRC-33");
+    public static List<String> profiles = List.of("vide1", "video2", "audio1");
     AtomicLong segmentNumberTracker = new AtomicLong(1000);
-    AtomicLong lastCopyFromSegment = new AtomicLong(1000);
     SegmentDownload segmentDownload = SegmentDownload.of(
         SegmentReady.of("", "", "", Optional.empty(), ""),
         new ArrayList<>(), "", "", 42
@@ -60,11 +59,10 @@ public class SampleProducer {
 
     @Outgoing("copy-from-sample-out")
     public Flux<PlayerCopyReady> segmentCopyFromProducer() {
-        return Flux.interval(Duration.ofMillis(1000))
+        return Flux.interval(Duration.ofMillis(3000))
             .filter(__ -> segmentNumberTracker.get() > 1005)
-            .filter(__ -> segmentNumberTracker.get() - lastCopyFromSegment.get() > 3)
             .map(__ -> {
-                long latestOffset = lastCopyFromSegment.addAndGet(3);
+                long latestOffset = segmentNumberTracker.get() - 1;
                 return PlayerCopyReady.of(
                     sources.shuffle().get(0),
                     latestOffset - 2,
@@ -74,7 +72,7 @@ public class SampleProducer {
     }
 
     private List<SegmentReady> segmentReadyList(long segmentNumber) {
-        var encoding = Optional.of(StringUtils.repeat(UUID.randomUUID().toString(), 1));
+        var encoding = Optional.of(StringUtils.repeat(UUID.randomUUID().toString(), 2));
 
         return List.ofAll(For(sources, src ->
             For(profiles

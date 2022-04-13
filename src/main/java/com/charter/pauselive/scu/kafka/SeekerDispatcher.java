@@ -7,8 +7,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -18,44 +18,52 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @ApplicationScoped
 public class SeekerDispatcher {
-    @ConfigProperty(name = "dispatcher.seekers.limit")
     int seekersLimit;
-    @ConfigProperty(name = "dispatcher.segmentready.topic")
     String segmentReadyTopic;
 
-    //    private final ConcurrentHashMap<Integer, LinkedBlockingQueue<Seeker>> seekers = new ConcurrentHashMap<>();
-    private LinkedBlockingQueue<Seeker> seekers;
+    private final LinkedBlockingQueue<Seeker> seekers;
     private List<TopicPartition> segmentReadyPartitions;
 
-    @Inject
-    void init() {
+    public SeekerDispatcher(
+        @ConfigProperty(name = "dispatcher.seekers.limit") int seekersLimit,
+        @ConfigProperty(name = "dispatcher.segmentready.topic") String segmentReadyTopic
+    ) {
+        this.seekersLimit = seekersLimit;
+        this.segmentReadyTopic = segmentReadyTopic;
+        this.segmentReadyPartitions = List.empty();
+
         seekers = new LinkedBlockingQueue<>(seekersLimit);
         List.range(0, seekersLimit).forEach(__ -> seekers.offer(Seeker.getNew()));
+    }
 
+    @PostConstruct
+    void assignSeekers() {
         assignSeekers(segmentReadyTopic);
     }
 
     public ConsumerRecord<String, byte[]> search(int partition, long offset) {
-        if (!segmentReadyPartitions.contains(new TopicPartition(segmentReadyTopic, partition))) {
-            Log.info("New partition found. Assigning seeker again...");
-            assignSeekers(segmentReadyTopic);
-        }
-
         Seeker seeker;
         do {
             seeker = seekers.poll();
         } while (seeker == null);
 
         var record = seeker.fetchRecord(segmentReadyTopic, partition, offset);
-        seekers.offer(seeker);
+
+        if (record.value().length > 0)
+            seekers.offer(seeker);
+        else {
+            seeker.terminateAsync();
+            seekers.offer(Seeker.getNew().withAssignment(segmentReadyPartitions.toJavaList()));
+        }
 
         return record;
     }
 
+    /**
+     * Assign all seekers to all partitions in `topic`.
+     */
     @Lock
     void assignSeekers(String topic) {
-        segmentReadyPartitions = List.empty();
-
         Seeker seeker = Seeker.getNew();
         seeker.subscribe(List.of(topic).toJavaList());
         segmentReadyPartitions = getAllPartitions(seeker, topic);
@@ -68,6 +76,9 @@ public class SeekerDispatcher {
             Log.fatal("No partitions found for segment-ready topic!");
     }
 
+    /**
+     * Produces list of topicPartitions for a single `topic`.
+     */
     private List<TopicPartition> getAllPartitions(Seeker consumer, String topic) {
         Log.infof("subscribedSeeker - consumer assignments: %s, topic: %s", consumer.assignment(), topic);
         Log.infof("subscribedSeeker - topics found: %s", consumer.listTopics().keySet());

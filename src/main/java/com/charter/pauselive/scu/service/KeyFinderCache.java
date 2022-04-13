@@ -5,14 +5,12 @@ import com.charter.pauselive.scu.model.*;
 
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
-import io.smallrye.reactive.messaging.kafka.IncomingKafkaRecord;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static com.charter.pauselive.scu.service.Helpers.drainQueue;
@@ -40,10 +38,8 @@ public class KeyFinderCache {
         readyKeyQueue = new LinkedBlockingQueue<>(maxReadyKeyQueueSizeAllowed * 10);
     }
 
-    public void insertAll(List<PlayerCopyReady> copyReadyRequests) {
-        copyReadyRequests.forEach(
-            request -> retryQueue.offer(new RequestsTracker(request, readyKeyCache))
-        );
+    public void insert(PlayerCopyReady copyReadyRequests) {
+        retryQueue.offer(new RequestsTracker(copyReadyRequests, readyKeyCache));
     }
 
     public boolean hasCapacity() {

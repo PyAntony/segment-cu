@@ -19,6 +19,14 @@ public class Payloads {
         public abstract long segmentNumber();
         public abstract int partition();
         public abstract long offset();
+
+        @Default
+        @Auxiliary
+        @Parameter(false)
+        public int copyReadyRequestId() {
+            return 0;
+        }
+
         @Auxiliary
         public abstract Optional<SegmentDownload> fallbackMessage();
 
@@ -42,20 +50,6 @@ public class Payloads {
     public static abstract class ABCReadyKey {
         public abstract String source();
         public abstract long segmentNumber();
-
-        @Default
-        @Parameter(false)
-        public String profile() {
-            return "UNDEFINED";
-        }
-
-        public ABCReadyKey withDefinedProfile(String profile) {
-            return ReadyKey.builder()
-                .source(source())
-                .segmentNumber(segmentNumber())
-                .profile(profile)
-                .build();
-        }
 
         public ABCSegmentReadyKey asSegmentReadyKey(ABCReadyMeta meta) {
             return SegmentReadyKey.of(

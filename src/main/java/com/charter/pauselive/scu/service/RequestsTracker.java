@@ -3,10 +3,14 @@ package com.charter.pauselive.scu.service;
 import com.charter.pauselive.scu.model.Payloads.*;
 import com.charter.pauselive.scu.model.PlayerCopyReady;
 import com.charter.pauselive.scu.model.ReadyKey;
+import com.charter.pauselive.scu.model.SegmentReadyKey;
 import io.quarkus.logging.Log;
+import io.vavr.Tuple;
+import io.vavr.Tuple2;
 import io.vavr.collection.HashSet;
 import io.vavr.collection.List;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -22,14 +26,13 @@ public class RequestsTracker {
     ABCPlayerCopyReady copyReadyRef;
     /**
      * On construction a PlayerCopyReady message is expanded to this list.
-     * Each ReadyKey type represents a mapping in ReadyKeyCache.
+     * Each ReadyKey type is a key in ReadyKeyCache.
      */
     HashSet<ABCReadyKey> readyKeysToRequest;
     /**
-     * Mapping of profiles sent to be seeked/fetched. Boolean values can be used to mark success of final
-     * rerouting (message was fetched and resent successfully).
+     * Profiles sent to be seeked/fetched.
      */
-    ConcurrentHashMap<ABCSegmentReadyKey, Boolean> profilesSent = new ConcurrentHashMap<>();
+    Set<ABCSegmentReadyKey> profilesSent = ConcurrentHashMap.newKeySet();
     /**
      * Number of times each key in `readyKeysToRequest` was searched for in cache.
      */
@@ -47,23 +50,28 @@ public class RequestsTracker {
         copyReadyRef = copyReady;
     }
 
-    public List<ABCSegmentReadyKey> getNewSeekLocations(ReadyKeyCache cache) {
+    public List<SegmentReadyKey> getNewSeekLocations(ReadyKeyCache cache) {
         var newSegmentReadyKeys = For(readyKeysToRequest, key ->
             For(cache.getReadyLocations(key)
-                .map(key::asSegmentReadyKey)
-                .filter(segmentReadyKey -> !profilesSent.containsKey(segmentReadyKey))
+                .map(meta -> (SegmentReadyKey) key.asSegmentReadyKey(meta))
+                .map(readyKey -> readyKey.withCopyReadyRequestId(getCopyReadyRequestId()))
+                .filter(segmentReadyKey -> !profilesSent.contains(segmentReadyKey))
             ).yield()
         );
 
         return List.ofAll(newSegmentReadyKeys)
             .asJava(list -> list.forEach(key -> {
                 Log.debugf("Sending request to SegmentReadyRouter: %s", key);
-                profilesSent.put(key, false);
+                profilesSent.add(key);
             }));
     }
 
-    public void requestSucceeded(ABCSegmentReadyKey segmentReadyKey) {
-        profilesSent.computeIfPresent(segmentReadyKey, (k, v) -> true);
+    public Tuple2<HashSet<ABCReadyKey>, HashSet<ABCSegmentReadyKey>> getSets() {
+        return Tuple.of(readyKeysToRequest, HashSet.ofAll(profilesSent));
+    }
+
+    public int getCopyReadyRequestId() {
+        return copyReadyRef.hashCode();
     }
 
     private long estimateLastSegment(long oldestSegment, ReadyKeyCache cache) {
