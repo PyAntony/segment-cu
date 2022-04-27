@@ -41,7 +41,7 @@ public class SCUObserver {
     }
 
     void onSeekSuccess(@Observes @SeekSuccess(value = true) SeekEvent seekEvent) {
-        Log.debugf("Seek event succeeded: %s", seekEvent.asInfoPayload(debugMode));
+        Log.infof("Seek event succeeded: %s", seekEvent.asInfoPayload(debugMode));
 
         if (trackHistory) {
             successfulHistory.compute(
