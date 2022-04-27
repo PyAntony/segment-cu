@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
 import javax.enterprise.context.Dependent;
-import javax.enterprise.inject.spi.CDI;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Properties;
@@ -105,7 +104,6 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
 
     private void terminate() {
         close();
-        CDI.current().destroy(this);
         Log.debugf("Seeker %s was terminated...", identifier);
     }
 
@@ -135,10 +133,6 @@ public class Seeker extends KafkaConsumer<String, byte[]> {
         props.setProperty("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 
         return props;
-    }
-
-    public static Seeker getNew() {
-        return CDI.current().select(Seeker.class).get();
     }
 
     public static class RecordNotFoundException extends Exception {

@@ -1,5 +1,6 @@
 package com.charter.pauselive.scu.service;
 
+import com.charter.pauselive.scu.kafka.Seeker;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.converters.uni.UniReactorConverters;
@@ -9,6 +10,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.TopicPartition;
 import reactor.core.publisher.Mono;
 
+import javax.enterprise.inject.spi.CDI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -81,5 +83,12 @@ public class Helpers {
         queue.drainTo(requests);
 
         return requests;
+    }
+
+    public static <T> T freeBean(Class<T> classType) {
+        var bean = CDI.current().select(classType).get();
+        CDI.current().destroy(bean);
+
+        return bean;
     }
 }

@@ -11,6 +11,8 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static com.charter.pauselive.scu.service.Helpers.freeBean;
+
 /**
  * Dispatcher instantiates all seekers and assigns them to required topic (segment-ready).
  * It holds a queue of seekers that resembles a worker thread pool.
@@ -36,7 +38,7 @@ public class SeekerDispatcher {
         this.segmentReadyPartitions = List.empty();
 
         seekers = new LinkedBlockingQueue<>(seekersLimit);
-        List.range(0, seekersLimit).forEach(__ -> seekers.offer(Seeker.getNew()));
+        List.range(0, seekersLimit).forEach(__ -> seekers.offer(freeBean(Seeker.class)));
     }
 
     @PostConstruct
@@ -56,7 +58,7 @@ public class SeekerDispatcher {
             seekers.offer(seeker);
         else {
             seeker.terminateAsync();
-            seekers.offer(Seeker.getNew().withAssignment(segmentReadyPartitions.toJavaList()));
+            seekers.offer(freeBean(Seeker.class).withAssignment(segmentReadyPartitions.toJavaList()));
         }
 
         return record;
@@ -67,7 +69,7 @@ public class SeekerDispatcher {
      */
     @Lock
     void assignSeekers(String topic) {
-        Seeker seeker = Seeker.getNew();
+        Seeker seeker = freeBean(Seeker.class);
         seeker.subscribe(List.of(topic).toJavaList());
         segmentReadyPartitions = getAllPartitions(seeker, topic);
         Log.infof("TopicPartitions found for seekers: %s", segmentReadyPartitions);

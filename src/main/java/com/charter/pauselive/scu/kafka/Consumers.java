@@ -12,6 +12,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Acknowledgment;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
 
 import javax.annotation.PostConstruct;
@@ -49,6 +50,11 @@ public class Consumers {
         Log.debugf("\nConfigProvider INFO: %s", fileProperties);
 
         copyReadySubscriber = new BaseSubscriber<>() {
+            @Override
+            public void hookOnSubscribe(Subscription subscription) {
+                request(1);
+            }
+
             @Override
             public void hookOnNext(PlayerCopyReady message) {
                 if (message.src().isBlank()) {
