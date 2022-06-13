@@ -39,7 +39,10 @@ public class KeyFinderCache {
     }
 
     public void insert(PlayerCopyReady copyReadyRequests) {
-        retryQueue.offer(new RequestsTracker(copyReadyRequests, readyKeyCache));
+        Log.debugf("inserting CopyReady: %s", copyReadyRequests);
+        boolean inserted = retryQueue.offer(new RequestsTracker(copyReadyRequests, readyKeyCache));
+
+        Log.debugf("CopyReady %s inserted: %s", copyReadyRequests, inserted);
     }
 
     public boolean hasCapacity() {
