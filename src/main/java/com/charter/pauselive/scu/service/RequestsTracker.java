@@ -41,12 +41,14 @@ public class RequestsTracker {
     public RequestsTracker(PlayerCopyReady copyReady, ReadyKeyCache cache) {
         long lastSegment = copyReady.lastProcessedSegment();
         long maxSegment = lastSegment > 0 ? lastSegment : estimateLastSegment(copyReady.oldestSegment(), cache);
+        Log.debugf("(%s) insertion - lastSegment: %s, maxSegment: %s", copyReady, lastSegment, maxSegment);
 
         readyKeysToRequest = maxSegment > copyReady.oldestSegment() ?
             HashSet.range(copyReady.oldestSegment(), maxSegment + 1)
                 .map(segment -> ReadyKey.of(copyReady.src(), segment)) :
             HashSet.empty();
 
+        Log.debugf("(%s) readyKeysToRequest stored: %s", copyReady, readyKeysToRequest);
         copyReadyRef = copyReady;
     }
 
