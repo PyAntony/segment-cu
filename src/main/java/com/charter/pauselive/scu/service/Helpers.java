@@ -12,10 +12,7 @@ import reactor.core.publisher.Mono;
 
 import javax.enterprise.inject.spi.CDI;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class Helpers {
@@ -55,10 +52,10 @@ public class Helpers {
         List.ofAll(consumer.offsetsForTimes(request).entrySet())
             .forEach(entry -> {
                 Log.debugf("seekOffsets - sought: (%s -> %s)", entry.getKey(), entry.getValue());
-                consumer.seek(
-                    entry.getKey(),
-                    entry.getValue() == null ? 0L : entry.getValue().offset()
-                );
+                if (entry.getValue() == null)
+                    consumer.seekToEnd(Set.of(entry.getKey()));
+                else
+                    consumer.seek(entry.getKey(), entry.getValue().offset());
             });
     }
 
