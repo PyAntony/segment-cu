@@ -2,7 +2,6 @@ package com.charter.pauselive.scu;
 
 import io.quarkus.runtime.annotations.QuarkusMain;
 import io.quarkus.runtime.Quarkus;
-import io.vavr.collection.HashSet;
 
 @QuarkusMain
 public class Main {

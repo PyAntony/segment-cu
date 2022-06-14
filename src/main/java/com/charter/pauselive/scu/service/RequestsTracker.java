@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.vavr.API.For;
 
 /**
- * Class with logic to map PlayerCopyReady to SegmentReadyKey payloads.
+ * Class maps PlayerCopyReady to SegmentReadyKey payloads.
  */
 public class RequestsTracker {
     /**
@@ -38,17 +38,21 @@ public class RequestsTracker {
      */
     public AtomicInteger retries = new AtomicInteger(0);
 
-    public RequestsTracker(PlayerCopyReady copyReady, ReadyKeyCache cache) {
+    public RequestsTracker(PlayerCopyReady copyReady, ReadyKeyCache cache, int maxRange) {
         long lastSegment = copyReady.lastProcessedSegment();
-        long maxSegment = lastSegment > 0 ? lastSegment : estimateLastSegment(copyReady.oldestSegment(), cache);
-        Log.debugf("(%s) insertion - lastSegment: %s, maxSegment: %s", copyReady, lastSegment, maxSegment);
+        long lastSegmentReq = lastSegment > 0 ? lastSegment : findLastSegment(copyReady, cache);
+        long initSegment = copyReady.oldestSegment();
+        long initSegmentReq = lastSegmentReq - initSegment > maxRange ? lastSegmentReq - maxRange : initSegment;
+        Log.debugf(
+            "ReqTracker(%s) - lastSegment, req: (%s, %s), initSegment, req: (%s, %s)",
+            copyReady, lastSegment, lastSegmentReq, initSegment, initSegmentReq
+        );
 
-        readyKeysToRequest = maxSegment > copyReady.oldestSegment() ?
-            HashSet.range(copyReady.oldestSegment(), maxSegment + 1)
+        readyKeysToRequest = initSegmentReq > 0 && lastSegmentReq > initSegmentReq ?
+            HashSet.range(initSegmentReq, lastSegmentReq + 1)
                 .map(segment -> ReadyKey.of(copyReady.src(), segment)) :
             HashSet.empty();
 
-        Log.debugf("(%s) readyKeysToRequest stored: %s", copyReady, readyKeysToRequest);
         copyReadyRef = copyReady;
     }
 
@@ -72,12 +76,22 @@ public class RequestsTracker {
         return Tuple.of(readyKeysToRequest, HashSet.ofAll(profilesSent));
     }
 
+    /**
+     * Generate unique Id for the CopyReady payload.
+     */
     public int getCopyReadyRequestId() {
         return copyReadyRef.hashCode();
     }
 
-    private long estimateLastSegment(long oldestSegment, ReadyKeyCache cache) {
-        return cache.readyKeysOlderThan(oldestSegment)
+    /**
+     * Find the greatest segment number in ReadyKeyCache cache.
+     *
+     * @param copyReady copyReady payload.
+     * @param cache     ReadyKeyCache cache.
+     * @return greatest segment number or -1 if source is not found.
+     */
+    private long findLastSegment(PlayerCopyReady copyReady, ReadyKeyCache cache) {
+        return cache.readyKeysOlderThan(copyReady.oldestSegment(), copyReady.src())
             .map(ABCReadyKey::segmentNumber)
             .max()
             .getOrElse(-1L);

@@ -23,6 +23,8 @@ public class KeyFinderCache {
     int maxReadyKeyQueueSizeAllowed;
     @ConfigProperty(name = "keyfinder.try.num")
     int maxCopyRetries;
+    @ConfigProperty(name = "keyfinder.copyready.segments.limit")
+    int maxSegmentsPerRequest;
 
     private LinkedBlockingQueue<RequestsTracker> retryQueue;
     private LinkedBlockingQueue<ABCSegmentReadyKey> readyKeyQueue;
@@ -38,11 +40,11 @@ public class KeyFinderCache {
         readyKeyQueue = new LinkedBlockingQueue<>(maxReadyKeyQueueSizeAllowed * 10);
     }
 
-    public void insert(PlayerCopyReady copyReadyRequests) {
-        Log.debugf("inserting CopyReady: %s", copyReadyRequests);
-        boolean inserted = retryQueue.offer(new RequestsTracker(copyReadyRequests, readyKeyCache));
+    public void insert(PlayerCopyReady copyReady) {
+        Log.debugf("inserting CopyReady: %s", copyReady);
+        boolean inserted = retryQueue.offer(new RequestsTracker(copyReady, readyKeyCache, maxSegmentsPerRequest));
 
-        Log.debugf("CopyReady %s inserted: %s", copyReadyRequests, inserted);
+        Log.debugf("CopyReady %s inserted: %s", copyReady, inserted);
     }
 
     public boolean hasCapacity() {

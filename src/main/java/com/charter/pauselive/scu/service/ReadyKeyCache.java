@@ -47,9 +47,9 @@ public class ReadyKeyCache {
         );
     }
 
-    public List<ABCReadyKey> readyKeysOlderThan(long segmentNumber) {
+    public List<ABCReadyKey> readyKeysOlderThan(long segmentNumber, String src) {
         return List.ofAll(sourceSegmentMap.keySet())
-            .filter(key -> key.segmentNumber() > segmentNumber);
+            .filter(key -> key.source().equals(src) && key.segmentNumber() > segmentNumber);
     }
 
     public HashSet<ABCReadyMeta> getReadyLocations(ABCReadyKey key) {

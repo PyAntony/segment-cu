@@ -59,10 +59,10 @@ public class Consumers {
             public void hookOnNext(PlayerCopyReady message) {
                 if (message.src().isBlank()) {
                     request(1);
-                    return;
-                }
-
-                keyFinderCache.insert(message);
+                } else if (message.oldestSegment() < 1) {
+                    Log.warnf("CopyReady message with invalid oldest segment: %s", message);
+                } else
+                    keyFinderCache.insert(message);
             }
         };
     }
