@@ -1,8 +1,22 @@
-# segment-cu Project
+# SCU (Segment Catch-Up) Project
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Application republishes already downloaded segments on the same topic. There is some context 
+that needs to be understood first: 
+- When `Segment Downloader` uploads a new segment (in `segment-ready` topic), it also sends a 
+message with metadata (to `segment-ready-keys`) about this message; metadata includes the partition 
+and offset where the SegmentReady message was published.
+- `MSPlayer-Q` keeps track of the current segment number of the live manifest. When a request from 
+`PaLM` is received with an older segment (e.g., current segment is 1000 and `PaLM` sends a request 
+with 990) `MSPlayer-Q` sends a message with that segment range (990 to 1000) to the `segment-copy-from-ready` 
+topic. This is done since `MSPlayer-Q` only downloads live manifests 
+and sends notifications to `Segment Downloader` for live segments. It is assumed that 
+older segment numbers have been already downloaded and stored somewhere.
 
-If you want to learn more about Quarkus, please visit its website: https://quarkus.io/ .
+`SCU` keeps an internal cache of messages consumed from `segment-ready-keys`; i.e., it knows where to find older segments. It 
+also consumes messages from `segment-copy-from-ready`, so it knows which segments need to be searched and republished. 
+Using its internal cache `SCU` searches for the position (partition, offset) of this older segments in the `segment-ready` 
+topic, fetches the full message and republishes it again in the same topic. `Copy Service` now can consume older 
+segments.
 
 ## Running the application in dev mode
 
